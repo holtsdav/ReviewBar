@@ -1,0 +1,28 @@
+# Xcode
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.xcscmblueprint
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Secrets and imported App Store Connect keys
+*.p8
+AuthKey_*.p8
+*.pem
+*.key
+.env
+.env.*
+Credentials/
+Secrets.xcconfig
+
+# macOS
+.DS_Store
+
+# Local tooling
+.xcodegen/

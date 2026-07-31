@@ -1,0 +1,85 @@
+name: ReviewBar
+options:
+  bundleIdPrefix: com.reviewbar
+  deploymentTarget:
+    iOS: "26.0"
+  xcodeVersion: "26.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED: YES
+    ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
+targets:
+  ReviewBar:
+    type: application
+    platform: iOS
+    sources:
+      - path: ReviewBar
+    info:
+      path: ReviewBar/Support/Info.plist
+      properties:
+        CFBundleDisplayName: ReviewBar
+        LSApplicationCategoryType: public.app-category.developer-tools
+        UILaunchScreen:
+          UIColorName: ""
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIFileSharingEnabled: false
+        ITSAppUsesNonExemptEncryption: false
+        UIApplicationSupportsIndirectInputEvents: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.reviewbar.ReviewBar
+        PRODUCT_NAME: ReviewBar
+        MARKETING_VERSION: 1.0
+        CURRENT_PROJECT_VERSION: 1
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_ASSET_PATHS: '"ReviewBar/Preview Content"'
+        GENERATE_INFOPLIST_FILE: NO
+  ReviewBarTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: ReviewBarTests
+    dependencies:
+      - target: ReviewBar
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.reviewbar.ReviewBarTests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/ReviewBar.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ReviewBar"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+  ReviewBarUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: ReviewBarUITests
+    dependencies:
+      - target: ReviewBar
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.reviewbar.ReviewBarUITests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: ReviewBar
+schemes:
+  ReviewBar:
+    build:
+      targets:
+        ReviewBar: all
+        ReviewBarTests: [test]
+        ReviewBarUITests: [test]
+    test:
+      gatherCoverageData: true
+      targets:
+        - name: ReviewBarTests
+        - name: ReviewBarUITests
+    run:
+      config: Debug
