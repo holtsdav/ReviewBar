@@ -11,6 +11,11 @@ struct SectionIssueView: View {
             Text(issue.message)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            if issue.usingCachedData == true, let cachedAt = issue.cachedAt {
+                Label("Showing saved data from \(DisplayFormatters.dateTime(cachedAt))", systemImage: "clock.arrow.circlepath")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
             Button("Retry", action: retry)
                 .buttonStyle(.bordered)
         }
@@ -18,7 +23,8 @@ struct SectionIssueView: View {
     }
 
     private var title: String {
-        switch issue.kind {
+        if issue.usingCachedData == true { return "Couldn’t Update This Section" }
+        return switch issue.kind {
         case .permission: "Permission Required"
         case .offline: "You’re Offline"
         case .rateLimited: "Refresh Paused"
@@ -38,4 +44,3 @@ struct SectionIssueView: View {
         }
     }
 }
-

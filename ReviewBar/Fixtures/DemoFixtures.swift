@@ -62,7 +62,7 @@ enum DemoFixtures {
                     territory: "USA",
                     createdDate: referenceDate.addingTimeInterval(-42 * 60),
                     appVersion: "1.3",
-                    hasDeveloperResponse: false
+                    developerResponseState: nil
                 ),
                 CustomerReview(
                     id: "review-g-2",
@@ -73,7 +73,7 @@ enum DemoFixtures {
                     territory: "CAN",
                     createdDate: referenceDate.addingTimeInterval(-3 * 86_400),
                     appVersion: "1.3",
-                    hasDeveloperResponse: true
+                    developerResponseState: .published
                 ),
                 CustomerReview(
                     id: "review-g-3",
@@ -84,7 +84,7 @@ enum DemoFixtures {
                     territory: "DEU",
                     createdDate: referenceDate.addingTimeInterval(-12 * 86_400),
                     appVersion: "1.2",
-                    hasDeveloperResponse: false
+                    developerResponseState: nil
                 )
             ],
             builds: [
@@ -97,7 +97,9 @@ enum DemoFixtures {
                     expirationDate: referenceDate.addingTimeInterval(89 * 86_400),
                     expired: false,
                     processingState: .processing,
-                    minimumOSVersion: "18.0"
+                    minimumOSVersion: "18.0",
+                    audienceType: "INTERNAL_ONLY",
+                    internalBetaState: "PROCESSING"
                 ),
                 BuildInfo(
                     id: "build-g-47",
@@ -108,7 +110,12 @@ enum DemoFixtures {
                     expirationDate: referenceDate.addingTimeInterval(88 * 86_400),
                     expired: false,
                     processingState: .valid,
-                    minimumOSVersion: "18.0"
+                    minimumOSVersion: "18.0",
+                    audienceType: "APP_STORE_ELIGIBLE",
+                    internalBetaState: "IN_BETA_TESTING",
+                    externalBetaState: "IN_BETA_TESTING",
+                    betaReviewState: "APPROVED",
+                    selectedForAppStoreVersion: "1.4"
                 )
             ],
             nextReviewsPage: URL(string: "reviewbar-demo://reviews/glassdays/2"),
@@ -138,7 +145,7 @@ enum DemoFixtures {
                     territory: "GBR",
                     createdDate: referenceDate.addingTimeInterval(-9 * 3_600),
                     appVersion: "2.0",
-                    hasDeveloperResponse: false
+                    developerResponseState: nil
                 )
             ],
             builds: [
@@ -151,7 +158,11 @@ enum DemoFixtures {
                     expirationDate: referenceDate.addingTimeInterval(70 * 86_400),
                     expired: false,
                     processingState: .valid,
-                    minimumOSVersion: "17.0"
+                    minimumOSVersion: "17.0",
+                    audienceType: "APP_STORE_ELIGIBLE",
+                    internalBetaState: "IN_BETA_TESTING",
+                    externalBetaState: "WAITING_FOR_BETA_REVIEW",
+                    betaReviewState: "WAITING_FOR_REVIEW"
                 ),
                 BuildInfo(
                     id: "build-t-87",
@@ -162,7 +173,11 @@ enum DemoFixtures {
                     expirationDate: referenceDate.addingTimeInterval(-30 * 86_400),
                     expired: true,
                     processingState: .valid,
-                    minimumOSVersion: "17.0"
+                    minimumOSVersion: "17.0",
+                    audienceType: "APP_STORE_ELIGIBLE",
+                    internalBetaState: "EXPIRED",
+                    externalBetaState: "EXPIRED",
+                    betaReviewState: "APPROVED"
                 )
             ],
             nextReviewsPage: nil,
@@ -200,8 +215,7 @@ enum DemoFixtures {
             territory: "AUS",
             createdDate: referenceDate.addingTimeInterval(-40 * 86_400),
             appVersion: "1.1",
-            hasDeveloperResponse: true
+            developerResponseState: .pendingPublish
         )
     ]
 }
-

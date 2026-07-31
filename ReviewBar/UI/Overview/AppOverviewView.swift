@@ -5,23 +5,37 @@ struct AppOverviewView: View {
     let dashboard: AppDashboard?
     @Binding var selectedAppID: String?
     @Binding var selectedTab: DashboardTab
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         Group {
             if let dashboard {
                 List {
-                    if let current = dashboard.currentRelease {
-                        Section("Release Status") {
+                    SelectedAppHeader(name: dashboard.app.name)
+                    if model.showingCachedData {
+                        DataStatusBanner(lastUpdated: model.lastUpdated, issue: model.lastRefreshIssue)
+                    }
+
+                    Section("Release Status") {
+                        if let issue = dashboard.sectionIssues[.releases] {
+                            SectionIssueView(issue: issue) { Task { await model.refresh() } }
+                        }
+                        if let current = dashboard.currentRelease {
                             Button {
                                 selectedTab = .releases
                             } label: {
                                 VStack(alignment: .leading, spacing: 10) {
-                                    HStack(alignment: .firstTextBaseline) {
-                                        Text("Version \(current.version)")
-                                            .font(.title2.bold())
-                                            .foregroundStyle(.primary)
-                                        Spacer()
-                                        ReleaseStatusLabel(state: current.state)
+                                    if dynamicTypeSize.isAccessibilitySize {
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            releaseTitle(current)
+                                            ReleaseStatusLabel(state: current.state)
+                                        }
+                                    } else {
+                                        HStack(alignment: .firstTextBaseline) {
+                                            releaseTitle(current)
+                                            Spacer()
+                                            ReleaseStatusLabel(state: current.state)
+                                        }
                                     }
                                     if let submitted = current.submittedDate {
                                         LabeledContent("Submitted") {
@@ -38,38 +52,43 @@ struct AppOverviewView: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityHint("Opens releases")
-                        }
-                    } else if let issue = dashboard.sectionIssues[.releases] {
-                        Section("Release Status") {
-                            SectionIssueView(issue: issue) { Task { await model.refresh() } }
-                        }
-                    } else {
-                        Section("Release Status") {
+                        } else if dashboard.sectionIssues[.releases] == nil {
                             Text("No App Store versions are available for this app.")
                                 .foregroundStyle(.secondary)
                         }
                     }
 
-                    if let live = dashboard.liveRelease,
-                       live.id != dashboard.currentRelease?.id {
-                        Section("Live on the App Store") {
-                            LabeledContent("Version", value: live.version)
-                            ReleaseStatusLabel(state: live.state)
+                    if let ready = dashboard.distributionReadyRelease,
+                       ready.id != dashboard.currentRelease?.id {
+                        Section("Ready for Distribution") {
+                            LabeledContent("Version", value: ready.version)
+                            ReleaseStatusLabel(state: ready.state)
+                            Text("Availability can still depend on territory settings and active agreements.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
                         }
                     }
 
                     Section("Latest Upload") {
+                        if let issue = dashboard.sectionIssues[.builds] {
+                            SectionIssueView(issue: issue) { Task { await model.refresh() } }
+                        }
                         if let build = dashboard.latestBuild {
                             Button {
                                 selectedTab = .builds
                             } label: {
                                 VStack(alignment: .leading, spacing: 9) {
-                                    HStack(alignment: .firstTextBaseline) {
-                                        Text(build.version.map { "\($0) (\(build.buildNumber))" } ?? "Build \(build.buildNumber)")
-                                            .font(.headline)
-                                            .foregroundStyle(.primary)
-                                        Spacer()
-                                        BuildStatusLabel(build: build)
+                                    if dynamicTypeSize.isAccessibilitySize {
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            buildTitle(build)
+                                            BuildStatusLabel(build: build)
+                                        }
+                                    } else {
+                                        HStack(alignment: .firstTextBaseline) {
+                                            buildTitle(build)
+                                            Spacer()
+                                            BuildStatusLabel(build: build)
+                                        }
                                     }
                                     if let uploaded = build.uploadedDate {
                                         Text("Uploaded \(DisplayFormatters.relative(uploaded))")
@@ -86,22 +105,21 @@ struct AppOverviewView: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityHint("Opens builds")
-                        } else if let issue = dashboard.sectionIssues[.builds] {
-                            SectionIssueView(issue: issue) { Task { await model.refresh() } }
-                        } else {
+                        } else if dashboard.sectionIssues[.builds] == nil {
                             Text("No builds are available.")
                                 .foregroundStyle(.secondary)
                         }
                     }
 
                     Section("Newest Review") {
+                        if let issue = dashboard.sectionIssues[.reviews] {
+                            SectionIssueView(issue: issue) { Task { await model.refresh() } }
+                        }
                         if let review = dashboard.newestReview {
                             NavigationLink(value: review) {
                                 ReviewPreview(review: review, isUnread: model.unreadReviewIDs.contains(review.id))
                             }
-                        } else if let issue = dashboard.sectionIssues[.reviews] {
-                            SectionIssueView(issue: issue) { Task { await model.refresh() } }
-                        } else {
+                        } else if dashboard.sectionIssues[.reviews] == nil {
                             Text("No customer reviews yet.")
                                 .foregroundStyle(.secondary)
                         }
@@ -121,25 +139,31 @@ struct AppOverviewView: View {
             AppContextToolbar(dashboards: model.dashboards, selectedAppID: $selectedAppID)
         }
     }
+
+    private func releaseTitle(_ release: AppRelease) -> some View {
+        Text("Version \(release.version)")
+            .font(.title2.bold())
+            .foregroundStyle(.primary)
+    }
+
+    private func buildTitle(_ build: BuildInfo) -> some View {
+        Text(build.version.map { "\($0) (\(build.buildNumber))" } ?? "Build \(build.buildNumber)")
+            .font(.headline)
+            .foregroundStyle(.primary)
+    }
 }
 
 private struct ReviewPreview: View {
     let review: CustomerReview
     let isUnread: Bool
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                StarRatingView(rating: review.rating)
-                if isUnread {
-                    Text("New")
-                        .font(.caption.bold())
-                        .foregroundStyle(.tint)
-                }
-                Spacer()
-                Text(DisplayFormatters.relative(review.createdDate))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 5) { reviewMetadata }
+            } else {
+                HStack { reviewMetadata }
             }
             Text(review.title)
                 .font(.headline)
@@ -147,11 +171,23 @@ private struct ReviewPreview: View {
             Text(review.body)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .lineLimit(3)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 5 : 3)
             Text(review.reviewerNickname)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    @ViewBuilder private var reviewMetadata: some View {
+                StarRatingView(rating: review.rating)
+                if isUnread {
+                    Label("New", systemImage: "circle.fill")
+                        .font(.caption.bold()).foregroundStyle(.primary)
+                }
+                Spacer()
+                Text(DisplayFormatters.relative(review.createdDate))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
     }
 }
 

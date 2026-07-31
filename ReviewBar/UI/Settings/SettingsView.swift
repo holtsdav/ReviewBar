@@ -38,11 +38,13 @@ struct SettingsView: View {
                         confirmingDisconnect = true
                     }
                 } footer: {
-                    Text("This removes the imported credential, cached dashboards, unread state, and locally observed release history from ReviewBar.")
+                    Text(model.source == .demo
+                         ? "This exits local sample data and restores your previous App Store Connect connection, if one exists."
+                         : "This removes the imported credential, cached dashboards, unread state, and locally observed release history from ReviewBar.")
                 }
 
                 Section("About") {
-                    LabeledContent("ReviewBar", value: "1.0")
+                    LabeledContent("ReviewBar", value: appVersion)
                     Text("A focused, read-only App Store developer dashboard.")
                         .foregroundStyle(.secondary)
                 }
@@ -61,8 +63,12 @@ struct SettingsView: View {
             ) {
                 Button(model.source == .demo ? "Exit Demo" : "Remove Connection", role: .destructive) {
                     Task {
-                        await model.disconnect()
-                        dismiss()
+                        if model.source == .demo {
+                            await model.exitDemo()
+                            dismiss()
+                        } else if await model.disconnect() {
+                            dismiss()
+                        }
                     }
                 }
                 Button("Cancel", role: .cancel) {}
@@ -83,11 +89,18 @@ struct SettingsView: View {
                     sections: [
                         ("Release timing", "Apple provides the submission date but not a timestamp for every review-state transition. ReviewBar labels locally observed changes and treats their durations as approximate."),
                         ("Reviews", "App-level customer review objects do not include the reviewed app version or an Apple-side unread flag. Version appears only when it is legitimately known; unread state is device-local."),
+                        ("Build history", "To keep refreshes efficient, ReviewBar loads Apple’s newest 200 builds for each app."),
                         ("Background updates", "Without a backend, iOS background refresh is opportunistic and cannot promise real-time alerts. ReviewBar remains fully useful through foreground refresh and caching.")
                     ]
                 )
             }
         }
+    }
+
+    private var appVersion: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        return build.map { "\(version) (\($0))" } ?? version
     }
 }
 
@@ -113,4 +126,3 @@ private struct InformationSheet: View {
         }
     }
 }
-

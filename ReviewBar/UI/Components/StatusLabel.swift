@@ -4,9 +4,12 @@ struct ReleaseStatusLabel: View {
     let state: ReleaseState
 
     var body: some View {
-        Label(state.title, systemImage: state.symbol)
+        Label {
+            Text(state.title).foregroundStyle(.primary)
+        } icon: {
+            Image(systemName: state.symbol).foregroundStyle(state.tint)
+        }
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(state.tint)
             .accessibilityElement(children: .combine)
     }
 }
@@ -17,29 +20,39 @@ struct BuildStatusLabel: View {
     var body: some View {
         Group {
             if build.expired {
-                Label("Expired", systemImage: "calendar.badge.exclamationmark")
-                    .foregroundStyle(.secondary)
+                Label {
+                    Text("Expired").foregroundStyle(.primary)
+                } icon: {
+                    Image(systemName: "calendar.badge.exclamationmark").foregroundStyle(.secondary)
+                }
             } else if build.processingState == .processing {
                 Label {
-                    Text("Processing")
+                    Text("Processing").foregroundStyle(.primary)
                 } icon: {
                     ProgressView()
                         .controlSize(.small)
                 }
-                .foregroundStyle(.blue)
             } else if build.processingState == .valid {
-                Label("Ready", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                Label {
+                    Text("Ready").foregroundStyle(.primary)
+                } icon: {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                }
             } else if build.processingState == .failed || build.processingState == .invalid {
-                Label(build.processingState.title, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
+                Label {
+                    Text(build.processingState.title).foregroundStyle(.primary)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
+                }
             } else {
-                Label(build.processingState.title, systemImage: "questionmark.circle")
-                    .foregroundStyle(.secondary)
+                Label {
+                    Text(build.processingState.title).foregroundStyle(.primary)
+                } icon: {
+                    Image(systemName: "questionmark.circle").foregroundStyle(.secondary)
+                }
             }
         }
         .font(.subheadline.weight(.semibold))
         .accessibilityElement(children: .combine)
     }
 }
-

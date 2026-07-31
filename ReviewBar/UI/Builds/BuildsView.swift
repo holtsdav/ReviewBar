@@ -6,16 +6,22 @@ struct BuildsView: View {
     @Binding var selectedAppID: String?
     @State private var filter: BuildFilter = .all
     @State private var sort: BuildSort = .newest
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         Group {
             if let dashboard {
                 List {
-                    if let issue = dashboard.sectionIssues[.builds], dashboard.builds.isEmpty {
+                    SelectedAppHeader(name: dashboard.app.name)
+                    if model.showingCachedData {
+                        DataStatusBanner(lastUpdated: model.lastUpdated, issue: model.lastRefreshIssue)
+                    }
+                    if let issue = dashboard.sectionIssues[.builds] {
                         Section {
                             SectionIssueView(issue: issue) { Task { await model.refresh() } }
                         }
-                    } else if visibleBuilds.isEmpty {
+                    }
+                    if visibleBuilds.isEmpty, dashboard.sectionIssues[.builds] == nil || !dashboard.builds.isEmpty {
                         ContentUnavailableView {
                             Label(dashboard.builds.isEmpty ? "No Builds" : "No Matching Builds", systemImage: "hammer")
                         } description: {
@@ -34,6 +40,11 @@ struct BuildsView: View {
                                     BuildRow(build: build)
                                 }
                             }
+                        }
+                        Section {
+                            Text("ReviewBar shows Apple’s newest 200 builds for this app.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -149,6 +160,10 @@ private struct BuildRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            if let audienceType = build.audienceType {
+                LabeledContent("Audience", value: audienceType.displayStatus)
+                    .font(.caption)
+            }
             if let state = build.internalBetaState {
                 LabeledContent("Internal TestFlight", value: state.displayStatus)
                     .font(.caption)
@@ -157,14 +172,26 @@ private struct BuildRow: View {
                 LabeledContent("External TestFlight", value: state.displayStatus)
                     .font(.caption)
             }
-            if let expiration = build.expirationDate {
-                Text(build.expired
-                     ? "Expired \(DisplayFormatters.dateTime(expiration))"
-                     : "Expires \(DisplayFormatters.relative(expiration)) · \(DisplayFormatters.dateTime(expiration))")
+            if let state = build.betaReviewState {
+                LabeledContent("Beta review", value: state.displayStatus)
                     .font(.caption)
-                    .foregroundStyle(build.expired
-                                     ? Color.secondary
-                                     : expiration.timeIntervalSinceNow < 14 * 86_400 ? Color.orange : Color.secondary)
+            }
+            if let expiration = build.expirationDate {
+                if !build.expired, expiration.timeIntervalSinceNow < 14 * 86_400 {
+                    Label {
+                        Text("Expires \(DisplayFormatters.relative(expiration)) · \(DisplayFormatters.dateTime(expiration))")
+                            .foregroundStyle(.primary)
+                    } icon: {
+                        Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange)
+                    }
+                    .font(.caption)
+                } else {
+                    Text(build.expired
+                         ? "Expired \(DisplayFormatters.dateTime(expiration))"
+                         : "Expires \(DisplayFormatters.relative(expiration)) · \(DisplayFormatters.dateTime(expiration))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .padding(.vertical, 4)

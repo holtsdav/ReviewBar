@@ -4,6 +4,11 @@ struct HomeView: View {
     let model: AppModel
     @State private var selectedTab: DashboardTab = .apps
     @State private var selectedAppID: String?
+    @State private var appsPath = NavigationPath()
+    @State private var overviewPath = NavigationPath()
+    @State private var releasesPath = NavigationPath()
+    @State private var reviewsPath = NavigationPath()
+    @State private var buildsPath = NavigationPath()
 
     init(model: AppModel) {
         self.model = model
@@ -12,7 +17,7 @@ struct HomeView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            NavigationStack {
+            NavigationStack(path: $appsPath) {
                 AppsListView(
                     model: model,
                     selectedAppID: $selectedAppID,
@@ -22,7 +27,7 @@ struct HomeView: View {
             .tabItem { Label("Apps", systemImage: "square.grid.2x2") }
             .tag(DashboardTab.apps)
 
-            NavigationStack {
+            NavigationStack(path: $overviewPath) {
                 AppOverviewView(
                     model: model,
                     dashboard: selectedDashboard,
@@ -33,20 +38,20 @@ struct HomeView: View {
             .tabItem { Label("Overview", systemImage: "rectangle.grid.1x2") }
             .tag(DashboardTab.overview)
 
-            NavigationStack {
+            NavigationStack(path: $releasesPath) {
                 ReleasesView(model: model, dashboard: selectedDashboard, selectedAppID: $selectedAppID)
             }
             .tabItem { Label("Releases", systemImage: "point.3.connected.trianglepath.dotted") }
             .tag(DashboardTab.releases)
 
-            NavigationStack {
+            NavigationStack(path: $reviewsPath) {
                 ReviewsView(model: model, dashboard: selectedDashboard, selectedAppID: $selectedAppID)
             }
             .tabItem { Label("Reviews", systemImage: "star.bubble") }
             .badge(unreadCount)
             .tag(DashboardTab.reviews)
 
-            NavigationStack {
+            NavigationStack(path: $buildsPath) {
                 BuildsView(model: model, dashboard: selectedDashboard, selectedAppID: $selectedAppID)
             }
             .tabItem { Label("Builds", systemImage: "hammer") }
@@ -54,6 +59,11 @@ struct HomeView: View {
         }
         .onChange(of: selectedAppID) { _, newValue in
             UserDefaults.standard.set(newValue, forKey: "ReviewBar.selectedAppID")
+            appsPath = NavigationPath()
+            overviewPath = NavigationPath()
+            releasesPath = NavigationPath()
+            reviewsPath = NavigationPath()
+            buildsPath = NavigationPath()
         }
         .onChange(of: model.dashboards.map(\.id), initial: true) { _, ids in
             if selectedAppID == nil || !ids.contains(selectedAppID ?? "") {

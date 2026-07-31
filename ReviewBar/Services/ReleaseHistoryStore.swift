@@ -22,11 +22,12 @@ actor ReleaseHistoryStore {
     }
 
     func record(_ releases: [AppRelease], appID: String, at date: Date = .now) throws {
+        var candidate = observations
         var changed = false
         for release in releases {
-            let previous = observations.last { $0.releaseID == release.id }
+            let previous = candidate.last { $0.releaseID == release.id }
             guard previous?.state != release.state else { continue }
-            observations.append(ReleaseObservation(
+            candidate.append(ReleaseObservation(
                 id: UUID(),
                 appID: appID,
                 releaseID: release.id,
@@ -37,7 +38,10 @@ actor ReleaseHistoryStore {
             ))
             changed = true
         }
-        if changed { try persist() }
+        if changed {
+            try persist(candidate)
+            observations = candidate
+        }
     }
 
     func observations(for releaseID: String) -> [ReleaseObservation] {
@@ -53,16 +57,16 @@ actor ReleaseHistoryStore {
 
         for values in grouped.values {
             let ordered = values.sorted { $0.observedAt < $1.observedAt }
-            if let submitted = ordered.first(where: { $0.state == .waitingForReview }),
-               let inReview = ordered.first(where: { $0.state == .inReview && $0.observedAt >= submitted.observedAt }) {
+            for approvalIndex in ordered.indices where approvedStates.contains(ordered[approvalIndex].state) {
+                guard approvalIndex >= 2,
+                      ordered[approvalIndex - 1].state == .inReview,
+                      ordered[approvalIndex - 2].state == .waitingForReview else { continue }
+                let submitted = ordered[approvalIndex - 2]
+                let inReview = ordered[approvalIndex - 1]
+                let approved = ordered[approvalIndex]
                 waiting.append(inReview.observedAt.timeIntervalSince(submitted.observedAt))
-                if let approved = ordered.first(where: {
-                    [ReleaseState.pendingDeveloperRelease, .processingForDistribution, .readyForDistribution].contains($0.state)
-                        && $0.observedAt >= inReview.observedAt
-                }) {
-                    reviewing.append(approved.observedAt.timeIntervalSince(inReview.observedAt))
-                    approvals.append(approved.observedAt.timeIntervalSince(submitted.observedAt))
-                }
+                reviewing.append(approved.observedAt.timeIntervalSince(inReview.observedAt))
+                approvals.append(approved.observedAt.timeIntervalSince(submitted.observedAt))
             }
         }
 
@@ -76,19 +80,23 @@ actor ReleaseHistoryStore {
     }
 
     func clear() throws {
+        try persist([])
         observations = []
-        try persist()
     }
 
-    private func persist() throws {
+    private func persist(_ candidate: [ReleaseObservation]) throws {
         guard let fileURL else { return }
         try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        try encoder.encode(observations).write(
+        try encoder.encode(candidate).write(
             to: fileURL,
             options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
         )
+    }
+
+    private var approvedStates: Set<ReleaseState> {
+        [.pendingDeveloperRelease, .processingForDistribution, .readyForDistribution]
     }
 }
 

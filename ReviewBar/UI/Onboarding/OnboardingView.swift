@@ -133,8 +133,11 @@ private struct CredentialFormView: View {
 
                 Section("Private Key") {
                     if let importedFilename {
-                        Label(importedFilename, systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
+                        Label {
+                            Text(importedFilename).foregroundStyle(.primary)
+                        } icon: {
+                            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                        }
                             .lineLimit(2)
                         Button("Replace Imported Key") { showingImporter = true }
                         Button("Remove Imported Key", role: .destructive) {
@@ -254,7 +257,7 @@ private struct CredentialHelpView: View {
         NavigationStack {
             List {
                 Section("Recommended: Individual Key") {
-                    Text("In App Store Connect, open Users and Access, select your user, then use the Integrations area to generate an individual API key. A Developer-role user with access only to the apps you need is a strong default.")
+                    Text("First, the Account Holder requests API access in Users and Access → Integrations. After access is approved, an individual user opens their username, chooses Edit Profile, and creates an Individual API Key. A dedicated Developer-role user limited to the apps you need is a strong default.")
                 }
                 Section("Team Key") {
                     Text("An Account Holder or Admin can create a team key under Users and Access → Integrations. Team keys include an issuer ID and cannot be limited to selected apps.")

@@ -13,8 +13,14 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
         self.baseURL = baseURL
     }
 
+    init(transport: AppleAPITransport, baseURL: URL) {
+        self.transport = transport
+        self.baseURL = baseURL
+    }
+
     func fetchApps() async throws -> [DeveloperApp] {
         let url = try makeURL(path: "apps", query: [
+            URLQueryItem(name: "filter[appStoreVersions.platform]", value: "IOS"),
             URLQueryItem(name: "fields[apps]", value: "name,bundleId,sku,primaryLocale"),
             URLQueryItem(name: "sort", value: "name"),
             URLQueryItem(name: "limit", value: "200")
@@ -38,9 +44,9 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
         async let reviewsResult = capture { try await fetchFirstReviewsPage(appID: app.id) }
         async let buildsResult = capture { try await fetchBuilds(appID: app.id) }
 
-        let releases = await releasesResult
-        let reviews = await reviewsResult
-        let builds = await buildsResult
+        let releases = try await releasesResult
+        let reviews = try await reviewsResult
+        let builds = try await buildsResult
         var issues: [DashboardSection: SectionIssue] = [:]
         if case .failure(let error) = releases { issues[.releases] = SectionIssue(error: error) }
         if case .failure(let error) = reviews { issues[.reviews] = SectionIssue(error: error) }
@@ -131,6 +137,7 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
     private func fetchBuilds(appID: String) async throws -> [BuildInfo] {
         let url = try makeURL(path: "builds", query: [
             URLQueryItem(name: "filter[app]", value: appID),
+            URLQueryItem(name: "filter[preReleaseVersion.platform]", value: "IOS"),
             URLQueryItem(name: "include", value: "preReleaseVersion,buildBetaDetail,betaAppReviewSubmission,appStoreVersion"),
             URLQueryItem(name: "fields[builds]", value: "version,uploadedDate,expirationDate,expired,processingState,minOsVersion,buildAudienceType,preReleaseVersion,buildBetaDetail,betaAppReviewSubmission,appStoreVersion"),
             URLQueryItem(name: "fields[preReleaseVersions]", value: "version,platform"),
@@ -140,7 +147,9 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
             URLQueryItem(name: "sort", value: "-uploadedDate"),
             URLQueryItem(name: "limit", value: "200")
         ])
-        let pages: ([BuildAPIResource], [BuildIncludedAPIResource]) = try await fetchAllPages(from: url)
+        // The dashboard intentionally limits builds to Apple's newest 200. Fetching an
+        // account's complete build history on every foreground refresh is wasteful.
+        let pages: ([BuildAPIResource], [BuildIncludedAPIResource]) = try await fetchPage(from: url)
 
         var preReleases: [String: BuildIncludedAPIResource.PreReleaseVersion] = [:]
         var betaDetails: [String: BuildIncludedAPIResource.BetaDetail] = [:]
@@ -157,7 +166,7 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
         }
 
         var seen: Set<String> = []
-        return pages.0.compactMap { resource -> BuildInfo? in
+        let mappedBuilds = pages.0.compactMap { resource -> BuildInfo? in
             guard seen.insert(resource.id).inserted else { return nil }
             let relationships = resource.relationships
             let preRelease = relationships?.preReleaseVersion?.data.flatMap { preReleases[$0.id] }
@@ -181,9 +190,13 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
                 selectedForAppStoreVersion: appVersion?.versionString
             )
         }
-        .sorted { lhs, rhs in
+        return Self.iOSBuilds(mappedBuilds).sorted { lhs, rhs in
             (lhs.uploadedDate ?? .distantPast) > (rhs.uploadedDate ?? .distantPast)
         }
+    }
+
+    static func iOSBuilds(_ builds: [BuildInfo]) -> [BuildInfo] {
+        builds.filter { $0.platform == .iOS }
     }
 
     private func mapReviews(
@@ -191,7 +204,12 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
         responses: [CustomerReviewResponseAPIResource],
         next: URL?
     ) -> ReviewPage {
-        let responseIDs = Set(responses.map(\.id))
+        let responseStates = Dictionary(
+            responses.map {
+                ($0.id, DeveloperResponseState(apiValue: $0.attributes.state ?? "UNKNOWN"))
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
         var seen: Set<String> = []
         let reviews = resources.compactMap { resource -> CustomerReview? in
             guard seen.insert(resource.id).inserted else { return nil }
@@ -205,7 +223,9 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
                 territory: resource.attributes.territory,
                 createdDate: resource.attributes.createdDate,
                 appVersion: nil,
-                hasDeveloperResponse: responseID.map(responseIDs.contains) ?? false
+                developerResponseState: responseID.map {
+                    responseStates[$0] ?? DeveloperResponseState(apiValue: "UNKNOWN")
+                }
             )
         }
         return ReviewPage(reviews: reviews, nextPage: next)
@@ -249,12 +269,24 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
         return (resources, included)
     }
 
+    private func fetchPage<Resource: Decodable & Sendable, Included: Decodable & Sendable>(
+        from url: URL
+    ) async throws -> ([Resource], [Included]) {
+        try Task.checkCancellation()
+        let response = try await transport.get(url)
+        let page = try AppleAPIDecoder.make().decode(JSONAPIPage<Resource, Included>.self, from: response.data)
+        return (page.data, page.included ?? [])
+    }
+
     private func capture<Value: Sendable>(
         _ operation: @Sendable () async throws -> Value
-    ) async -> Result<Value, Error> {
+    ) async throws -> Result<Value, Error> {
         do {
             return .success(try await operation())
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
+            if Task.isCancelled { throw CancellationError() }
             return .failure(error)
         }
     }

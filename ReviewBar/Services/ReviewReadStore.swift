@@ -27,9 +27,11 @@ actor ReviewReadStore {
 
     func reconcile(appID: String, reviews: [CustomerReview]) throws {
         if !state.initializedApps.contains(appID) {
-            state.initializedApps.insert(appID)
-            state.readReviewIDs.formUnion(reviews.map(\.id))
-            try persist()
+            var candidate = state
+            candidate.initializedApps.insert(appID)
+            candidate.readReviewIDs.formUnion(reviews.map(\.id))
+            try persist(candidate)
+            state = candidate
         }
     }
 
@@ -46,29 +48,35 @@ actor ReviewReadStore {
     }
 
     func markRead(_ reviewID: String) throws {
-        state.readReviewIDs.insert(reviewID)
-        try persist()
+        var candidate = state
+        candidate.readReviewIDs.insert(reviewID)
+        try persist(candidate)
+        state = candidate
     }
 
     func markAllRead(_ reviews: [CustomerReview]) throws {
-        state.readReviewIDs.formUnion(reviews.map(\.id))
-        try persist()
+        var candidate = state
+        candidate.readReviewIDs.formUnion(reviews.map(\.id))
+        try persist(candidate)
+        state = candidate
     }
 
     func clear() throws {
-        state = State()
-        try persist()
+        let candidate = State()
+        try persist(candidate)
+        state = candidate
     }
 
     func configureDemo(appIDs: Set<String>, readReviewIDs: Set<String>) throws {
-        state = State(initializedApps: appIDs, readReviewIDs: readReviewIDs)
-        try persist()
+        let candidate = State(initializedApps: appIDs, readReviewIDs: readReviewIDs)
+        try persist(candidate)
+        state = candidate
     }
 
-    private func persist() throws {
+    private func persist(_ candidate: State) throws {
         guard let fileURL else { return }
         try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try JSONEncoder().encode(state).write(
+        try JSONEncoder().encode(candidate).write(
             to: fileURL,
             options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
         )

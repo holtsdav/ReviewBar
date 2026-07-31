@@ -49,4 +49,66 @@ struct DomainTests {
         #expect(build?.processingState == .valid)
         #expect(build?.expired == true)
     }
+
+    @Test("Demo includes realistic TestFlight metadata")
+    func demoTestFlightMetadata() throws {
+        let build = try #require(DemoFixtures.dashboards[0].builds.first { $0.buildNumber == "47" })
+        #expect(build.audienceType == "APP_STORE_ELIGIBLE")
+        #expect(build.internalBetaState == "IN_BETA_TESTING")
+        #expect(build.externalBetaState == "IN_BETA_TESTING")
+        #expect(build.betaReviewState == "APPROVED")
+        #expect(build.selectedForAppStoreVersion == "1.4")
+    }
+
+    @Test("Only iOS builds are kept for the iPhone dashboard")
+    func iOSBuildFiltering() {
+        let ios = DemoFixtures.dashboards[0].builds[0]
+        let mac = BuildInfo(
+            id: "mac-build",
+            buildNumber: "9",
+            version: "2.0",
+            platform: .macOS,
+            uploadedDate: .now,
+            expirationDate: nil,
+            expired: false,
+            processingState: .valid,
+            minimumOSVersion: "15.0"
+        )
+        #expect(AppStoreConnectDataProvider.iOSBuilds([mac, ios]).map(\.id) == [ios.id])
+    }
+
+    @Test("Accepted remains the current unreleased version")
+    func acceptedCurrentRelease() {
+        let original = DemoFixtures.dashboards[0]
+        let live = original.releases[1]
+        let accepted = AppRelease(
+            id: "accepted",
+            version: "1.5",
+            platform: .iOS,
+            state: .accepted,
+            createdDate: .now,
+            submittedDate: .now,
+            earliestReleaseDate: nil,
+            releaseType: nil,
+            selectedBuildID: nil,
+            reviewSubmissionState: "COMPLETE"
+        )
+        let dashboard = AppDashboard(
+            app: original.app,
+            releases: [accepted, live],
+            reviews: [],
+            builds: [],
+            nextReviewsPage: nil,
+            fetchedAt: .now
+        )
+        #expect(dashboard.currentRelease?.id == accepted.id)
+        #expect(dashboard.distributionReadyRelease?.id == live.id)
+    }
+
+    @Test("Developer response publication states stay distinct")
+    func responseStates() {
+        #expect(DeveloperResponseState.published.title == "Developer response published")
+        #expect(DeveloperResponseState.pendingPublish.title.contains("awaiting"))
+        #expect(DeveloperResponseState(apiValue: "FUTURE_STATE").rawValue == "FUTURE_STATE")
+    }
 }

@@ -10,9 +10,8 @@ struct StarRatingView: View {
             }
         }
         .font(.caption)
-        .foregroundStyle(.orange)
+        .foregroundStyle(.primary)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(rating) out of 5 stars")
     }
 }
-

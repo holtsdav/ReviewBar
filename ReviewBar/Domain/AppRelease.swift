@@ -116,4 +116,8 @@ struct ReleaseState: RawRepresentable, Codable, Hashable, Sendable {
          .processingForDistribution, .readyForDistribution, .rejected, .developerRejected,
          .metadataRejected, .invalidBinary, .pendingAppleRelease].contains(self)
     }
+
+    var requiresAttention: Bool {
+        [Self.rejected, .developerRejected, .metadataRejected, .invalidBinary].contains(self)
+    }
 }

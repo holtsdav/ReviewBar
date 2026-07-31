@@ -39,7 +39,8 @@ actor AppleAPITransport {
     private func perform(_ url: URL, mayRetryAuthentication: Bool) async throws -> AppleAPIResponse {
         try Task.checkCancellation()
         let path = url.path(percentEncoded: true)
-        let token = try await signer.token(forGETPath: path)
+        let requestTarget = url.query(percentEncoded: true).map { "\(path)?\($0)" } ?? path
+        let token = try await signer.token(forGETPath: requestTarget)
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
@@ -61,7 +62,7 @@ actor AppleAPITransport {
 
         switch http.statusCode {
         case 401 where mayRetryAuthentication:
-            await signer.invalidate(path: path)
+            await signer.invalidate(path: requestTarget)
             return try await perform(url, mayRetryAuthentication: false)
         case 401:
             throw AppleHTTPErrorMapper.map(statusCode: http.statusCode, data: data, retryAfterHeader: nil)

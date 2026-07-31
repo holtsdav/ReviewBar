@@ -18,6 +18,22 @@ struct AppError: Error, Equatable, Sendable {
     let kind: Kind
     let message: String
 
+    var title: String {
+        switch kind {
+        case .noCredentials: "No Credentials"
+        case .invalidCredentials: "Invalid Credentials"
+        case .revokedCredential: "Credential Revoked"
+        case .insufficientPermission: "Permission Required"
+        case .offline: "You’re Offline"
+        case .rateLimited: "Refresh Paused"
+        case .appleUnavailable: "Apple Unavailable"
+        case .malformedResponse: "Unexpected Apple Response"
+        case .fileImport: "Couldn’t Import Key"
+        case .secureStorage: "Secure Storage Issue"
+        case .other: "Couldn’t Refresh"
+        }
+    }
+
     static func map(_ error: Error) -> AppError {
         if let appError = error as? AppError { return appError }
         if error is DecodingError {
@@ -39,4 +55,3 @@ struct AppError: Error, Equatable, Sendable {
         return AppError(kind: .other, message: "ReviewBar couldn’t complete that request. Please try again.")
     }
 }
-

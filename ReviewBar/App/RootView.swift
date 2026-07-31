@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     let model: AppModel
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -17,7 +18,11 @@ struct RootView: View {
         .task {
             await model.start()
         }
-        .alert("Connection issue", isPresented: Binding(
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            Task { await model.refreshIfStale() }
+        }
+        .alert(model.presentedError?.title ?? "Connection Issue", isPresented: Binding(
             get: { model.presentedError != nil },
             set: { if !$0 { model.presentedError = nil } }
         )) {
@@ -43,4 +48,3 @@ private struct LaunchView: View {
 #Preview("Starting") {
     RootView(model: .preview(session: .starting))
 }
-

@@ -3,21 +3,50 @@ import SwiftUI
 struct AppRowView: View {
     let dashboard: AppDashboard
     let unreadCount: Int
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            AppGlyph(name: dashboard.app.name)
-            VStack(alignment: .leading, spacing: 7) {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                content
+            } else {
+                HStack(alignment: .top, spacing: 14) {
+                    AppGlyph(name: dashboard.app.name)
+                    content
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+        .padding(.vertical, 5)
+        .contentShape(.rect)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 7) {
                 Text(dashboard.app.name)
                     .font(.headline)
                     .foregroundStyle(.primary)
                     .lineLimit(2)
 
                 if let release = dashboard.currentRelease {
-                    HStack(spacing: 6) {
-                        Text(release.version).fontWeight(.medium)
-                        Text("·")
-                        ReleaseStatusLabel(state: release.state)
+                    Group {
+                        if dynamicTypeSize.isAccessibilitySize {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(release.version).fontWeight(.medium)
+                                ReleaseStatusLabel(state: release.state)
+                            }
+                        } else {
+                            HStack(spacing: 6) {
+                                Text(release.version).fontWeight(.medium)
+                                Text("·")
+                                ReleaseStatusLabel(state: release.state)
+                            }
+                        }
                     }
                     .font(.subheadline)
                     if let submittedDate = release.submittedDate {
@@ -31,29 +60,26 @@ struct AppRowView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                HStack(spacing: 8) {
-                    if let build = dashboard.latestBuild {
-                        Text("Build \(build.buildNumber) · \(build.expired ? "Expired" : build.processingState.title)")
-                    }
-                    if unreadCount > 0 {
-                        Text("\(unreadCount) new \(unreadCount == 1 ? "review" : "reviews")")
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.tint)
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        VStack(alignment: .leading, spacing: 3) { activityDetails }
+                    } else {
+                        HStack(spacing: 8) { activityDetails }
                     }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .lineLimit(2)
             }
-            Spacer(minLength: 4)
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
-                .accessibilityHidden(true)
-        }
-        .padding(.vertical, 5)
-        .contentShape(.rect)
-        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder private var activityDetails: some View {
+                    if let build = dashboard.latestBuild {
+                        Text("Build \(build.buildNumber) · \(build.expired ? "Expired" : build.processingState.title)")
+                    }
+                    if unreadCount > 0 {
+                        Label("\(unreadCount) new \(unreadCount == 1 ? "review" : "reviews")", systemImage: "circle.fill")
+                            .fontWeight(.semibold).foregroundStyle(.primary)
+                    }
     }
 }
 
@@ -72,4 +98,3 @@ private struct AppGlyph: View {
         .accessibilityHidden(true)
     }
 }
-

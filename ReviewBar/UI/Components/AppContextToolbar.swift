@@ -5,7 +5,7 @@ struct AppContextToolbar: ToolbarContent {
     @Binding var selectedAppID: String?
 
     var body: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
+        ToolbarItem(placement: .topBarTrailing) {
             Menu {
                 ForEach(dashboards) { dashboard in
                     Button {
@@ -19,18 +19,26 @@ struct AppContextToolbar: ToolbarContent {
                     }
                 }
             } label: {
-                HStack(spacing: 4) {
-                    Text(dashboards.first(where: { $0.id == selectedAppID })?.app.name ?? "Choose App")
-                        .font(.headline)
-                        .lineLimit(1)
-                    Image(systemName: "chevron.down.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Image(systemName: "square.grid.2x2")
             }
             .accessibilityLabel("Selected app")
-            .accessibilityValue(dashboards.first(where: { $0.id == selectedAppID })?.app.name ?? "None")
+            .accessibilityValue(selectedAppName)
         }
+    }
+
+    private var selectedAppName: String {
+        dashboards.first(where: { $0.id == selectedAppID })?.app.name ?? "None"
+    }
+}
+
+struct SelectedAppHeader: View {
+    let name: String
+
+    var body: some View {
+        Text(name)
+            .font(.title2.bold())
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityAddTraits(.isHeader)
     }
 }
 
@@ -43,4 +51,3 @@ struct ChooseAppView: View {
         )
     }
 }
-

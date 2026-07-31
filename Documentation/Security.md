@@ -19,12 +19,12 @@ There is no ReviewBar backend, account, analytics SDK, crash SDK, widget extensi
 - The original security-scoped file URL is accessed only for the import operation and is not bookmarked or copied.
 - Credentials use one precise generic-password Keychain query with service/account identifiers, synchronization disabled, and `WhenUnlockedThisDeviceOnly` accessibility.
 - ES256 JWTs use raw 64-byte JOSE signatures, live only in the signer actor’s memory, last ten minutes, and rotate with 60 seconds remaining.
-- Every production request is constructed as GET, with a path-scoped token. Authorization is never placed in a URL.
+- Every production request is constructed as GET, with a token scoped to the exact path and query. Authorization is never placed in a URL.
 - Authenticated URLs and redirects must remain on exact Apple HTTPS host boundaries.
 - The ephemeral URL session has cookies and URL caching disabled.
 - Cached decoded data uses an atomic protected file; the `.p8`, JWT, IDs required to authenticate, headers, and raw responses are never cached there.
 - No code prints or logs credentials, tokens, requests, raw responses, or customer review text.
-- Disconnect deletes the exact Keychain item and all ReviewBar local account state.
+- Disconnect verifies deletion of the exact Keychain item before reporting success, cancels in-flight data work, and erases all ReviewBar local account state. If local cleanup fails after credential deletion, the app records a nonsecret retry marker and retries cleanup on the next launch.
 
 ## Residual risks
 
@@ -37,4 +37,3 @@ There is no ReviewBar backend, account, analytics SDK, crash SDK, widget extensi
 ## Incident response
 
 If a key may be exposed, revoke it in App Store Connect immediately, remove the ReviewBar connection, create a replacement key, and review that App Store Connect user’s role/app access. Apple does not permit a revoked key to be restored.
-

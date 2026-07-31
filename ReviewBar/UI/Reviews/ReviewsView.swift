@@ -6,17 +6,23 @@ struct ReviewsView: View {
     @Binding var selectedAppID: String?
     @State private var filter = ReviewFilter()
     @State private var showingFilters = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         Group {
             if let dashboard {
                 let filtered = filter.apply(to: dashboard.reviews)
                 List {
-                    if let issue = dashboard.sectionIssues[.reviews], dashboard.reviews.isEmpty {
+                    SelectedAppHeader(name: dashboard.app.name)
+                    if model.showingCachedData {
+                        DataStatusBanner(lastUpdated: model.lastUpdated, issue: model.lastRefreshIssue)
+                    }
+                    if let issue = dashboard.sectionIssues[.reviews] {
                         Section {
                             SectionIssueView(issue: issue) { Task { await model.refresh() } }
                         }
-                    } else if filtered.isEmpty {
+                    }
+                    if filtered.isEmpty, dashboard.sectionIssues[.reviews] == nil || !dashboard.reviews.isEmpty {
                         ContentUnavailableView {
                             Label(dashboard.reviews.isEmpty ? "No Reviews" : "No Matching Reviews", systemImage: "star.bubble")
                         } description: {
@@ -27,6 +33,11 @@ struct ReviewsView: View {
                             if !dashboard.reviews.isEmpty {
                                 Button("Clear Filters") { filter = ReviewFilter() }
                             }
+                            if dashboard.nextReviewsPage != nil {
+                                Button("Load More Reviews") {
+                                    Task { await model.loadMoreReviews(appID: dashboard.id) }
+                                }
+                            }
                         }
                     } else {
                         Section {
@@ -36,11 +47,6 @@ struct ReviewsView: View {
                                         review: review,
                                         isUnread: model.unreadReviewIDs.contains(review.id)
                                     )
-                                }
-                                .onAppear {
-                                    guard review.id == filtered.last?.id,
-                                          dashboard.nextReviewsPage != nil else { return }
-                                    Task { await model.loadMoreReviews(appID: dashboard.id) }
                                 }
                             }
 
@@ -106,29 +112,55 @@ struct ReviewsView: View {
 private struct ReviewRow: View {
     let review: CustomerReview
     let isUnread: Bool
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 5) { rowMetadata }
+            } else {
+                HStack { rowMetadata }
+            }
+            Text(review.title)
+                .font(.headline)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 2)
+            Text(review.body)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 6 : 3)
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 3) { authorMetadata }
+                } else {
+                    HStack(spacing: 6) { authorMetadata }
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            if let responseState = review.developerResponseState {
+                Label(responseState.title, systemImage: responseState.symbol)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(isUnread ? "Unread" : "Read")
+    }
+
+    @ViewBuilder private var rowMetadata: some View {
                 StarRatingView(rating: review.rating)
                 if isUnread {
-                    Text("New")
-                        .font(.caption.bold())
-                        .foregroundStyle(.tint)
+                    Label("New", systemImage: "circle.fill")
+                        .font(.caption.bold()).foregroundStyle(.primary)
                 }
                 Spacer()
                 Text(DisplayFormatters.relative(review.createdDate))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
-            Text(review.title)
-                .font(.headline)
-                .lineLimit(2)
-            Text(review.body)
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .lineLimit(3)
-            HStack(spacing: 6) {
+    }
+
+    @ViewBuilder private var authorMetadata: some View {
                 Text(review.reviewerNickname)
                 if let territory = DisplayFormatters.territory(review.territory) {
                     Text("·")
@@ -138,19 +170,6 @@ private struct ReviewRow: View {
                     Text("·")
                     Text("v\(version)")
                 }
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .lineLimit(2)
-            if review.hasDeveloperResponse {
-                Label("Developer responded", systemImage: "arrowshape.turn.up.left.fill")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
-        .accessibilityValue(isUnread ? "Unread" : "Read")
     }
 }
 
@@ -183,8 +202,8 @@ struct ReviewDetailView: View {
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if review.hasDeveloperResponse {
-                    Label("A developer response is published", systemImage: "arrowshape.turn.up.left.fill")
+                if let responseState = review.developerResponseState {
+                    Label(responseState.title, systemImage: responseState.symbol)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -252,7 +271,7 @@ private struct ReviewFilterView: View {
                 }
 
                 Section {
-                    Button("Clear Filters", role: .destructive) { filter = ReviewFilter() }
+                    Button("Clear Filters") { filter = ReviewFilter() }
                 }
             }
             .navigationTitle("Filter Reviews")
@@ -273,4 +292,3 @@ private struct ReviewFilterView: View {
         Set(reviews.compactMap(\.appVersion)).sorted(by: >)
     }
 }
-

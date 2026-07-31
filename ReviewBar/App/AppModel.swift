@@ -23,14 +23,20 @@ final class AppModel {
     private(set) var isLoadingMoreReviews = false
     private(set) var lastUpdated: Date?
     private(set) var showingCachedData = false
+    private(set) var lastRefreshIssue: AppError?
     var presentedError: AppError?
 
     private let credentialStore: any CredentialStoring
     private let cache: any SnapshotCaching
-    private let historyStore: ReleaseHistoryStore
-    private let readStore: ReviewReadStore
+    private let liveHistoryStore: ReleaseHistoryStore
+    private let liveReadStore: ReviewReadStore
+    private var historyStore: ReleaseHistoryStore
+    private var readStore: ReviewReadStore
     private var repository: DashboardRepository?
     private var hasStarted = false
+    private var dataTask: Task<DashboardCollection, Error>?
+    private var operationID: UUID?
+    private var sessionGeneration = 0
 
     init(
         session: Session = .starting,
@@ -42,6 +48,8 @@ final class AppModel {
         self.session = session
         self.credentialStore = credentialStore
         self.cache = cache
+        liveHistoryStore = historyStore
+        liveReadStore = readStore
         self.historyStore = historyStore
         self.readStore = readStore
     }
@@ -84,6 +92,18 @@ final class AppModel {
         guard !hasStarted else { return }
         hasStarted = true
 
+        if UserDefaults.standard.bool(forKey: "ReviewBar.pendingLocalCleanup") {
+            let cleared = await clearLiveLocalData()
+            UserDefaults.standard.set(!cleared, forKey: "ReviewBar.pendingLocalCleanup")
+            if !cleared {
+                presentedError = AppError(
+                    kind: .secureStorage,
+                    message: "ReviewBar could not finish erasing previously cached local data. It will retry the next time the app opens."
+                )
+            }
+        }
+
+        #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-ui-testing-signed-out") {
             session = .signedOut
             return
@@ -107,6 +127,7 @@ final class AppModel {
             )
             return
         }
+        #endif
 
         if UserDefaults.standard.bool(forKey: "ReviewBar.demoMode") {
             await enterDemo(persist: false)
@@ -145,14 +166,31 @@ final class AppModel {
             UserDefaults.standard.set(false, forKey: "ReviewBar.demoMode")
             source = .live
             session = .ready
+            lastRefreshIssue = nil
             await apply(collection, cached: false)
         } catch {
+            let mapped = AppError.map(error)
             repository = nil
-            presentedError = AppError.map(error)
+            dashboards = []
+            unreadReviewIDs = []
+            lastUpdated = nil
+            let cleared = await clearLiveLocalData()
+            UserDefaults.standard.set(!cleared, forKey: "ReviewBar.pendingLocalCleanup")
+            presentedError = mapped
         }
     }
 
     func enterDemo(persist: Bool = true, scenario: DemoDataProvider.Scenario = .standard) async {
+        sessionGeneration += 1
+        dataTask?.cancel()
+        dataTask = nil
+        operationID = nil
+        isRefreshing = false
+        isLoadingMoreReviews = false
+        let demoHistoryStore = ReleaseHistoryStore()
+        let demoReadStore = ReviewReadStore()
+        historyStore = demoHistoryStore
+        readStore = demoReadStore
         let demoCache = MemorySnapshotCache(collection: DashboardCollection(
             dashboards: scenario.isStandard ? DemoFixtures.dashboards : [],
             fetchedAt: .now
@@ -160,8 +198,8 @@ final class AppModel {
         repository = DashboardRepository(
             provider: DemoDataProvider(scenario: scenario),
             cache: demoCache,
-            historyStore: historyStore,
-            readStore: readStore
+            historyStore: demoHistoryStore,
+            readStore: demoReadStore
         )
         if persist { UserDefaults.standard.set(true, forKey: "ReviewBar.demoMode") }
         source = .demo
@@ -169,8 +207,10 @@ final class AppModel {
         dashboards = scenario.isStandard ? DemoFixtures.dashboards : []
         lastUpdated = .now
         showingCachedData = false
+        lastRefreshIssue = nil
         if case .failure(let error) = scenario {
             presentedError = error
+            lastRefreshIssue = error
         }
         let allReviewIDs = Set(DemoFixtures.dashboards.flatMap(\.reviews).map(\.id))
         do {
@@ -188,30 +228,84 @@ final class AppModel {
     }
 
     func refresh() async {
-        guard let repository, !isRefreshing else { return }
+        guard let repository, dataTask == nil else { return }
+        let identifier = UUID()
+        let generation = sessionGeneration
         isRefreshing = true
-        defer { isRefreshing = false }
+        let task = Task { try await repository.refresh() }
+        dataTask = task
+        operationID = identifier
         do {
-            await apply(try await repository.refresh(), cached: false)
+            let collection = try await task.value
+            guard operationID == identifier,
+                  sessionGeneration == generation,
+                  session == .ready else { return }
+            lastRefreshIssue = nil
+            await apply(
+                collection,
+                cached: false,
+                expectedGeneration: generation,
+                expectedOperationID: identifier
+            )
         } catch is CancellationError {
-            return
+            // Cancellation is an expected part of disconnecting or replacing a session.
         } catch {
+            guard operationID == identifier, sessionGeneration == generation else { return }
+            let mapped = AppError.map(error)
             showingCachedData = !dashboards.isEmpty
-            presentedError = AppError.map(error)
+            lastRefreshIssue = mapped
+            presentedError = mapped
+        }
+        if operationID == identifier {
+            dataTask = nil
+            operationID = nil
+            isRefreshing = false
         }
     }
 
     func loadMoreReviews(appID: String) async {
-        guard let repository, !isLoadingMoreReviews else { return }
+        guard let repository, dataTask == nil else { return }
         let current = DashboardCollection(dashboards: dashboards, fetchedAt: lastUpdated ?? .now)
+        let identifier = UUID()
+        let generation = sessionGeneration
         isLoadingMoreReviews = true
-        defer { isLoadingMoreReviews = false }
+        let task = Task { try await repository.loadMoreReviews(for: appID, in: current) }
+        dataTask = task
+        operationID = identifier
         do {
-            await apply(try await repository.loadMoreReviews(for: appID, in: current), cached: showingCachedData)
+            let collection = try await task.value
+            guard operationID == identifier,
+                  sessionGeneration == generation,
+                  session == .ready else { return }
+            await apply(
+                collection,
+                cached: showingCachedData,
+                expectedGeneration: generation,
+                expectedOperationID: identifier
+            )
         } catch is CancellationError {
-            return
+            // Cancellation is an expected part of disconnecting or replacing a session.
         } catch {
-            presentedError = AppError.map(error)
+            guard operationID == identifier, sessionGeneration == generation else { return }
+            let mapped = AppError.map(error)
+            lastRefreshIssue = mapped
+            presentedError = mapped
+        }
+        if operationID == identifier {
+            dataTask = nil
+            operationID = nil
+            isLoadingMoreReviews = false
+        }
+    }
+
+    func refreshIfStale() async {
+        guard session == .ready, dataTask == nil else { return }
+        guard let lastUpdated else {
+            await refresh()
+            return
+        }
+        if Date.now.timeIntervalSince(lastUpdated) >= 5 * 60 {
+            await refresh()
         }
     }
 
@@ -241,23 +335,95 @@ final class AppModel {
         await historyStore.statistics(appID: appID)
     }
 
-    func disconnect() async {
+    @discardableResult
+    func disconnect() async -> Bool {
+        if source == .demo {
+            await exitDemo()
+            return true
+        }
+        sessionGeneration += 1
+        let pendingTask = dataTask
+        pendingTask?.cancel()
+        dataTask = nil
+        operationID = nil
+        isRefreshing = false
+        isLoadingMoreReviews = false
+        if let pendingTask {
+            _ = try? await pendingTask.value
+        }
+
         do {
             try await credentialStore.delete()
-            try await cache.clear()
-            try await readStore.clear()
-            try await historyStore.clear()
+            guard try await credentialStore.load() == nil else {
+                throw AppError(
+                    kind: .secureStorage,
+                    message: "ReviewBar could not verify that the credential was removed. The connection remains active."
+                )
+            }
         } catch {
-            presentedError = AppError.map(error)
+            let mapped = AppError.map(error)
+            presentedError = mapped.kind == .secureStorage ? mapped : AppError(
+                kind: .secureStorage,
+                message: "ReviewBar could not remove the credential from the Keychain. The connection remains active."
+            )
+            return false
         }
+
+        // Drop the in-memory signer immediately after the Keychain item is gone.
+        repository = nil
+        let cleanupSucceeded = await clearLiveLocalData()
+        UserDefaults.standard.set(!cleanupSucceeded, forKey: "ReviewBar.pendingLocalCleanup")
+
+        UserDefaults.standard.set(false, forKey: "ReviewBar.demoMode")
+        dashboards = []
+        unreadReviewIDs = []
+        lastUpdated = nil
+        showingCachedData = false
+        lastRefreshIssue = nil
+        source = .live
+        session = .signedOut
+        if !cleanupSucceeded {
+            presentedError = AppError(
+                kind: .secureStorage,
+                message: "The credential was removed, but some cached local data could not be erased. ReviewBar will retry automatically the next time it opens; deleting the app also removes its local data."
+            )
+        }
+        return true
+    }
+
+    func exitDemo() async {
+        sessionGeneration += 1
+        let pendingTask = dataTask
+        pendingTask?.cancel()
+        dataTask = nil
+        operationID = nil
+        isRefreshing = false
+        isLoadingMoreReviews = false
+        if let pendingTask { _ = try? await pendingTask.value }
+
         UserDefaults.standard.set(false, forKey: "ReviewBar.demoMode")
         repository = nil
         dashboards = []
         unreadReviewIDs = []
         lastUpdated = nil
         showingCachedData = false
+        lastRefreshIssue = nil
         source = .live
-        session = .signedOut
+        historyStore = liveHistoryStore
+        readStore = liveReadStore
+
+        do {
+            guard let credential = try await credentialStore.load() else {
+                session = .signedOut
+                return
+            }
+            try await configureLiveRepository(credential: credential)
+            session = .ready
+            await loadCachedThenRefresh()
+        } catch {
+            session = .signedOut
+            presentedError = AppError.map(error)
+        }
     }
 
     private func loadCachedThenRefresh() async {
@@ -275,24 +441,48 @@ final class AppModel {
 
     private func configureLiveRepository(credential: AppStoreConnectCredential) async throws {
         let provider = try AppStoreConnectDataProvider(credential: credential)
+        historyStore = liveHistoryStore
+        readStore = liveReadStore
         repository = DashboardRepository(
             provider: provider,
             cache: cache,
-            historyStore: historyStore,
-            readStore: readStore
+            historyStore: liveHistoryStore,
+            readStore: liveReadStore
         )
     }
 
-    private func apply(_ collection: DashboardCollection, cached: Bool) async {
+    private func clearLiveLocalData() async -> Bool {
+        var succeeded = true
+        do { try await cache.clear() } catch { succeeded = false }
+        do { try await liveReadStore.clear() } catch { succeeded = false }
+        do { try await liveHistoryStore.clear() } catch { succeeded = false }
+        return succeeded
+    }
+
+    private func apply(
+        _ collection: DashboardCollection,
+        cached: Bool,
+        expectedGeneration: Int? = nil,
+        expectedOperationID: UUID? = nil
+    ) async {
+        let stateStore = readStore
+        let unread = await stateStore.unreadIDs(in: collection.dashboards.flatMap(\.reviews))
+        if let expectedGeneration, expectedGeneration != sessionGeneration { return }
+        if let expectedOperationID, expectedOperationID != operationID { return }
+        guard session == .ready else { return }
         dashboards = collection.dashboards
         lastUpdated = collection.fetchedAt
-        showingCachedData = cached
-        await updateUnreadState()
+        showingCachedData = cached || collection.hasStaleSections
+        unreadReviewIDs = unread
     }
 
     private func updateUnreadState() async {
+        let generation = sessionGeneration
         let reviews = dashboards.flatMap(\.reviews)
-        unreadReviewIDs = await readStore.unreadIDs(in: reviews)
+        let stateStore = readStore
+        let unread = await stateStore.unreadIDs(in: reviews)
+        guard generation == sessionGeneration else { return }
+        unreadReviewIDs = unread
     }
 }
 

@@ -33,6 +33,7 @@
 		7D82EB7EE519AEFBA53E46AC /* ReleaseObservation.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD0BDDC1EC69C25EB66E3F1A /* ReleaseObservation.swift */; };
 		7E2880EFD66F1602A411124C /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C46CB93D270695B236CEB8C /* HomeView.swift */; };
 		8453E482E276C775C9F6D48B /* AppDashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BB63CF3F85E0070D7432A74 /* AppDashboard.swift */; };
+		8855BFB3819070D8BDBAF6A3 /* DataStatusBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E76926FFD25B9E81AB96EA9 /* DataStatusBanner.swift */; };
 		992CF46FCA4BCED8E98E8AA0 /* SnapshotCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C91DC82CD548E9D961E3836 /* SnapshotCache.swift */; };
 		A5AF1C2E9037DA6E0BC9A867 /* Base64URL.swift in Sources */ = {isa = PBXBuildFile; fileRef = C67E993FD2E69110A330DC15 /* Base64URL.swift */; };
 		AC6D942964FD8B5FC11A1367 /* ReviewsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D9EBF537729C38C34853913 /* ReviewsView.swift */; };
@@ -48,6 +49,7 @@
 		D5B0AD9AEA9053AF1BF37C7D /* SectionIssueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAB2B92DC4094C2A8EEBB14F /* SectionIssueView.swift */; };
 		D6809FE0ED4F39ECD49CE390 /* ReviewBarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7958A15178FC8F965E8F7388 /* ReviewBarApp.swift */; };
 		D8991C75CBF7788A9C366D6E /* ReleaseHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DF87E26DBFAA1045BDC9FEB /* ReleaseHistoryStore.swift */; };
+		DA22BE9192B70B666AF8F9B6 /* AppModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F15814CBF3055E1FF22E60 /* AppModelTests.swift */; };
 		E0221178800ED735C111368C /* CredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D95970D0CE67283AB627794C /* CredentialStore.swift */; };
 		E1F8566E3B17E84118649337 /* StarRatingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A5D2096B19B72DD0DAB672 /* StarRatingView.swift */; };
 		E8291C47E291C76C1BFFB2A6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3D4366756DE0B2F08BCAA7A6 /* Assets.xcassets */; };
@@ -93,6 +95,7 @@
 		4D6DB56C24821A484A1CD9B4 /* DashboardDataProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardDataProvider.swift; sourceTree = "<group>"; };
 		4D9EBF537729C38C34853913 /* ReviewsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewsView.swift; sourceTree = "<group>"; };
 		4E663E8E39013C2CF489DB70 /* ReviewBarUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ReviewBarUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		4E76926FFD25B9E81AB96EA9 /* DataStatusBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStatusBanner.swift; sourceTree = "<group>"; };
 		56A0DAC9C74301F16EA3D305 /* DashboardRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardRepository.swift; sourceTree = "<group>"; };
 		5E63395179725D107A9A502A /* StatusLabel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusLabel.swift; sourceTree = "<group>"; };
 		61AFCC51F2E478B8F1FE59D4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -122,6 +125,7 @@
 		DD473F8DD4E0A8C661907E28 /* AppRelease.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRelease.swift; sourceTree = "<group>"; };
 		DF6B344D1A7E0C18D4F687A9 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		E0FBFF4907B542A3F0BEDC46 /* ReviewBar.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ReviewBar.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1F15814CBF3055E1FF22E60 /* AppModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModelTests.swift; sourceTree = "<group>"; };
 		E2A5D2096B19B72DD0DAB672 /* StarRatingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StarRatingView.swift; sourceTree = "<group>"; };
 		E631C613740506AD896D656D /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		E69AC3081E6CA0779C616F7E /* DemoFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoFixtures.swift; sourceTree = "<group>"; };
@@ -169,6 +173,7 @@
 		3DEEA515AD6FB3E16B122EB2 /* ReviewBarTests */ = {
 			isa = PBXGroup;
 			children = (
+				E1F15814CBF3055E1FF22E60 /* AppModelTests.swift */,
 				3D0A3896602BAD9C85ADD43F /* DecodingTests.swift */,
 				92C8990F48A335A4AD833CDE /* DomainTests.swift */,
 				B821AF3D1A0638ABCCF33595 /* JWTGeneratorTests.swift */,
@@ -341,6 +346,7 @@
 			isa = PBXGroup;
 			children = (
 				46D15EA99BDCFABC7DC0A66F /* AppContextToolbar.swift */,
+				4E76926FFD25B9E81AB96EA9 /* DataStatusBanner.swift */,
 				FAB2B92DC4094C2A8EEBB14F /* SectionIssueView.swift */,
 				E2A5D2096B19B72DD0DAB672 /* StarRatingView.swift */,
 				5E63395179725D107A9A502A /* StatusLabel.swift */,
@@ -479,6 +485,7 @@
 				28AF43E69A95ACDAF4EFE610 /* CustomerReview.swift in Sources */,
 				11B5F96126EF78D65E21147E /* DashboardDataProvider.swift in Sources */,
 				FBFACE6AA52822CD5DC6AB75 /* DashboardRepository.swift in Sources */,
+				8855BFB3819070D8BDBAF6A3 /* DataStatusBanner.swift in Sources */,
 				19913C983B36F283DE5FE574 /* DemoDataProvider.swift in Sources */,
 				BC9800113AD3CFA1B073ECB2 /* DemoFixtures.swift in Sources */,
 				7768F04AF60A82169D5C610A /* DeveloperApp.swift in Sources */,
@@ -507,6 +514,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DA22BE9192B70B666AF8F9B6 /* AppModelTests.swift in Sources */,
 				58A04433B786D99CE3325DC7 /* DecodingTests.swift in Sources */,
 				1C845FCD5EA53E83C99849C0 /* DomainTests.swift in Sources */,
 				7CCA59A683D03255A4A00BA6 /* JWTGeneratorTests.swift in Sources */,
@@ -574,7 +582,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.reviewbar.ReviewBar;
 				PRODUCT_NAME = ReviewBar;
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -596,7 +604,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.reviewbar.ReviewBar;
 				PRODUCT_NAME = ReviewBar;
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};

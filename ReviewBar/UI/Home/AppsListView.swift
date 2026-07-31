@@ -11,7 +11,15 @@ struct AppsListView: View {
 
     var body: some View {
         Group {
-            if model.dashboards.isEmpty && !model.isRefreshing {
+            if model.dashboards.isEmpty && !model.isRefreshing, let issue = model.lastRefreshIssue {
+                ContentUnavailableView {
+                    Label(issue.title, systemImage: issue.kind == .offline ? "wifi.slash" : "exclamationmark.triangle")
+                } description: {
+                    Text(issue.message)
+                } actions: {
+                    Button("Try Again") { Task { await model.refresh() } }
+                }
+            } else if model.dashboards.isEmpty && !model.isRefreshing {
                 ContentUnavailableView {
                     Label("No Apps", systemImage: "square.grid.2x2")
                 } description: {
@@ -23,24 +31,37 @@ struct AppsListView: View {
                 }
             } else {
                 List {
-                    if model.showingCachedData, let lastUpdated = model.lastUpdated {
-                        CachedDataBanner(lastUpdated: lastUpdated)
+                    if model.showingCachedData {
+                        DataStatusBanner(lastUpdated: model.lastUpdated, issue: model.lastRefreshIssue)
                     }
 
-                    ForEach(filteredDashboards) { dashboard in
-                        Button {
-                            selectedAppID = dashboard.id
-                            selectedTab = .overview
-                        } label: {
-                            AppRowView(
-                                dashboard: dashboard,
-                                unreadCount: dashboard.reviews.lazy.filter {
-                                    model.unreadReviewIDs.contains($0.id)
-                                }.count
-                            )
+                    if filteredDashboards.isEmpty {
+                        ContentUnavailableView {
+                            Label("No Matching Apps", systemImage: "magnifyingglass")
+                        } description: {
+                            Text("Clear the search or choose a different activity filter.")
+                        } actions: {
+                            Button("Clear Search and Filter") {
+                                query = ""
+                                filter = .all
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityHint("Opens the app overview")
+                    } else {
+                        ForEach(filteredDashboards) { dashboard in
+                            Button {
+                                selectedAppID = dashboard.id
+                                selectedTab = .overview
+                            } label: {
+                                AppRowView(
+                                    dashboard: dashboard,
+                                    unreadCount: dashboard.reviews.lazy.filter {
+                                        model.unreadReviewIDs.contains($0.id)
+                                    }.count
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Opens the app overview")
+                        }
                     }
                 }
                 .refreshable { await model.refresh() }
@@ -58,7 +79,7 @@ struct AppsListView: View {
                 if model.isRefreshing && !model.dashboards.isEmpty {
                     ProgressView().controlSize(.small).accessibilityLabel("Refreshing")
                 }
-                Menu("Sort and Filter", systemImage: "line.3.horizontal.decrease") {
+                Menu("Sort and Filter", systemImage: filter == .all && sort == .name ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill") {
                     Picker("Sort", selection: $sort) {
                         ForEach(AppSort.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
@@ -137,19 +158,3 @@ private enum AppActivityFilter: CaseIterable {
         }
     }
 }
-
-private struct CachedDataBanner: View {
-    let lastUpdated: Date
-
-    var body: some View {
-        Label {
-            Text("Showing saved data from \(DisplayFormatters.dateTime(lastUpdated))")
-                .font(.footnote)
-        } icon: {
-            Image(systemName: "clock.arrow.circlepath")
-        }
-        .foregroundStyle(.secondary)
-        .accessibilityElement(children: .combine)
-    }
-}
-

@@ -15,7 +15,7 @@ Team JWTs use `iss`; individual JWTs use the literal `sub: user` and omit `iss`.
 
 ### Apps
 
-[`GET /v1/apps`](https://developer.apple.com/documentation/appstoreconnectapi/get-v1-apps) pages with a limit of 200 and uses the `name`, `bundleId`, `sku`, and `primaryLocale` fields.
+[`GET /v1/apps`](https://developer.apple.com/documentation/appstoreconnectapi/get-v1-apps) uses `filter[appStoreVersions.platform]=IOS`, pages with a limit of 200, and requests the `name`, `bundleId`, `sku`, and `primaryLocale` fields.
 
 ### App Store versions and submissions
 
@@ -32,7 +32,7 @@ ReviewBar maps the current `appVersionState`, preserves unknown future raw value
 - [`CustomerReview` attributes](https://developer.apple.com/documentation/appstoreconnectapi/customerreview/attributes-data.dictionary)
 - [`CustomerReviewResponseV1` attributes](https://developer.apple.com/documentation/appstoreconnectapi/customerreviewresponsev1/attributes-data.dictionary)
 
-The app requests rating, title, body, nickname, creation date, territory, and an included response. App-level review resources have no app-version attribute. ReviewBar’s networking module contains no POST, PATCH, or DELETE review operations.
+The app requests rating, title, body, nickname, creation date, territory, and an included response. Included response state remains distinct (`PUBLISHED`, `PENDING_PUBLISH`, or a future preserved value). App-level review resources have no app-version attribute. ReviewBar’s networking module contains no POST, PATCH, or DELETE review operations.
 
 ### Builds and TestFlight
 
@@ -42,7 +42,11 @@ The app requests rating, title, body, nickname, creation date, territory, and an
 - [`ExternalBetaState`](https://developer.apple.com/documentation/appstoreconnectapi/externalbetastate)
 - [`BetaReviewState`](https://developer.apple.com/documentation/appstoreconnectapi/betareviewstate)
 
-Build `version` is the build number. The related pre-release version supplies the marketing version and platform. `processingState` is preserved exactly; expiration uses Apple’s `expired` and `expirationDate`. TestFlight state and the App Store version relationship are labeled separately.
+Build `version` is the build number. The related pre-release version supplies the marketing version and platform. Apple provides `filter[preReleaseVersion.platform]=IOS`; ReviewBar uses it and defensively verifies the mapped platform. It intentionally limits each dashboard refresh to Apple’s newest 200 iOS Build resources. `processingState` is preserved exactly; expiration uses Apple’s `expired` and `expirationDate`. TestFlight state and the App Store version relationship are labeled separately.
+
+The separate [Build Uploads endpoint](https://developer.apple.com/documentation/appstoreconnectapi/get-v1-apps-_id_-builduploads) can represent a binary during Apple’s earliest upload/import stage, before a Build resource exists. Version 1.0 does not combine that resource, so an extremely recent upload appears after it reaches the Builds API.
+
+`ACCEPTED` is retained as the current unreleased version: it means that submission item passed while another item may still prevent the overall submission from completing. ReviewBar does not relabel `ACCEPTED` as Ready for Distribution.
 
 ## Pagination and errors
 
@@ -55,4 +59,3 @@ ReviewBar follows `links.next` rather than constructing cursors, validates every
 ## Unsupported exactness
 
 Apple’s ordinary read API does not expose exact timestamps for every release transition, a review queue estimate, build processing progress, an Apple-side unread flag, or one uniquely active TestFlight build. Apple webhooks can provide state-change events but require an HTTPS server; see [webhook events](https://developer.apple.com/documentation/appstoreconnectapi/webhook-events). ReviewBar has no backend, so these capabilities are not fabricated.
-

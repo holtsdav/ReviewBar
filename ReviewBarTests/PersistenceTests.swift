@@ -48,6 +48,50 @@ struct PersistenceTests {
         #expect(stats.completedReleaseCount == 1)
     }
 
+    @Test("Rejected attempt is excluded while a later contiguous approval is counted")
+    func resubmissionStatistics() async throws {
+        let store = ReleaseHistoryStore()
+        let base = Date(timeIntervalSince1970: 1_700_000_000)
+        let release = DemoFixtures.dashboards[0].releases[0]
+        let states: [(ReleaseState, TimeInterval)] = [
+            (.waitingForReview, 0), (.inReview, 100), (.rejected, 200),
+            (.waitingForReview, 300), (.inReview, 500), (.readyForDistribution, 900)
+        ]
+        for (state, offset) in states {
+            try await store.record([copy(release, state: state)], appID: "app", at: base.addingTimeInterval(offset))
+        }
+        let stats = await store.statistics(appID: "app")
+        #expect(stats.completedReleaseCount == 1)
+        #expect(stats.averageWaiting == 200)
+        #expect(stats.averageInReview == 400)
+        #expect(stats.fastestApproval == 600)
+    }
+
+    @Test("Failed review-state persistence does not mutate memory")
+    func readPersistenceIsAtomic() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("not a directory".utf8).write(to: directory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ReviewReadStore(fileURL: directory.appending(path: "state.json"))
+        let review = DemoFixtures.dashboards[0].reviews[0]
+        await #expect(throws: (any Error).self) { try await store.markRead(review.id) }
+        #expect(await store.isUnread(review))
+    }
+
+    @Test("Failed release-history persistence does not mutate memory")
+    func historyPersistenceIsAtomic() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try Data("not a directory".utf8).write(to: directory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ReleaseHistoryStore(fileURL: directory.appending(path: "history.json"))
+        let release = DemoFixtures.dashboards[0].releases[0]
+        await #expect(throws: (any Error).self) {
+            try await store.record([release], appID: "app")
+        }
+        #expect(await store.observations(for: release.id).isEmpty)
+    }
+
     private func copy(_ release: AppRelease, state: ReleaseState) -> AppRelease {
         AppRelease(
             id: release.id,
@@ -63,4 +107,3 @@ struct PersistenceTests {
         )
     }
 }
-
