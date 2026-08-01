@@ -247,7 +247,7 @@ private struct CredentialHelpView: View {
         NavigationStack {
             List {
                 Section("Recommended: Individual Key") {
-                    Text("First, the Account Holder requests API access in Users and Access → Integrations. After access is approved, an individual user opens their username, chooses Edit Profile, and creates an Individual API Key. A dedicated Developer-role user limited to the apps you need is a strong default.")
+                    Text("First, the Account Holder requests API access in Users and Access → Integrations. After access is approved, an individual user opens their username, chooses Edit Profile, and creates an Individual API Key. For Analytics Reports, use an Admin, Sales and Reports, or Finance role with access to the apps you need; a Developer role is not sufficient.")
                 }
                 Section("Team Key") {
                     Text("An Account Holder or Admin can create a team key under Users and Access → Integrations. Team keys include an issuer ID and cannot be limited to selected apps.")
