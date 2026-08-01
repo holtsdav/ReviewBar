@@ -2,7 +2,10 @@ import Foundation
 import zlib
 
 enum GzipDecoder {
-    static func decompress(_ data: Data, maximumOutputBytes: Int = 256 * 1_024 * 1_024) throws -> Data {
+    /// Analytics segments are processed one at a time. A conservative bound
+    /// prevents an unexpectedly high compression ratio from exhausting an
+    /// iPhone's memory while retaining ample room for Apple's daily TSV files.
+    static func decompress(_ data: Data, maximumOutputBytes: Int = 16 * 1_024 * 1_024) throws -> Data {
         guard !data.isEmpty, data.count <= Int(UInt32.max), maximumOutputBytes > 0 else {
             throw AppError(kind: .malformedResponse, message: "The Analytics report archive is empty or too large.")
         }

@@ -4,7 +4,8 @@ struct AppOverviewView: View {
     let model: AppModel
     let dashboard: AppDashboard?
     @Binding var selectedAppID: String?
-    @Binding var selectedTab: DashboardTab
+    let onOpenReviews: () -> Void
+    let onOpenAnalytics: () -> Void
     @State private var selectedPlatform: AppRelease.Platform?
 
     var body: some View {
@@ -31,12 +32,12 @@ struct AppOverviewView: View {
                         review: dashboard.newestReview,
                         issue: dashboard.sectionIssues[.reviews],
                         isUnread: dashboard.newestReview.map { model.unreadReviewIDs.contains($0.id) } ?? false,
-                        onOpen: { selectedTab = .reviews },
+                        onOpen: onOpenReviews,
                         onRetry: refresh
                     )
                     AnalyticsOverviewSection(
                         state: model.analyticsState(for: dashboard.id),
-                        onOpen: { selectedTab = .analytics }
+                        onOpen: onOpenAnalytics
                     )
                 }
                 .refreshable { await model.refresh() }
@@ -47,6 +48,9 @@ struct AppOverviewView: View {
                 .onChange(of: selectedPlatform) { _, value in
                     guard let value else { return }
                     UserDefaults.standard.set(value.rawValue, forKey: platformKey(for: dashboard.id))
+                }
+                .onChange(of: dashboard.availablePlatforms) { _, _ in
+                    normalizePlatform(for: dashboard)
                 }
             } else {
                 ChooseAppView()
@@ -62,6 +66,11 @@ struct AppOverviewView: View {
             .flatMap(AppRelease.Platform.init(rawValue:))
         selectedPlatform = saved.flatMap { dashboard.availablePlatforms.contains($0) ? $0 : nil }
             ?? dashboard.preferredPlatform
+    }
+
+    private func normalizePlatform(for dashboard: AppDashboard) {
+        if let selectedPlatform, dashboard.availablePlatforms.contains(selectedPlatform) { return }
+        restorePlatform(for: dashboard)
     }
 
     private func platformKey(for appID: String) -> String { "ReviewBar.platform.\(appID)" }
@@ -114,6 +123,7 @@ private struct CurrentReleaseOverviewSection: View {
                         secondaryDetail: release.reviewSubmissionState?.displayStatus
                     )
                 }
+                .accessibilityIdentifier("overview-release-history")
                 .accessibilityHint("Opens release history and lifecycle details")
             } else if dashboard.sectionIssues[.releases] == nil {
                 Text("No App Store version is available for this platform.")
@@ -121,8 +131,6 @@ private struct CurrentReleaseOverviewSection: View {
             }
         } header: {
             Text("Current Release")
-        } footer: {
-            Text("Release History contains version timelines, authoritative Apple timestamps, and locally observed transitions.")
         }
     }
 }
@@ -142,14 +150,15 @@ private struct LatestBuildOverviewSection: View {
                     OperationalStatusRow(
                         title: build.version.map { "\($0) (\(build.buildNumber))" } ?? "Build \(build.buildNumber)",
                         status: build.expired ? "Expired" : build.processingState.title,
-                        symbol: build.expired ? "clock.badge.xmark" : build.processingState == .processing ? "hourglass" : "checkmark.circle.fill",
-                        tint: build.expired ? .secondary : build.processingState == .processing ? .orange : .green,
+                        symbol: build.expired ? "clock.badge.xmark" : build.processingState.symbol,
+                        tint: build.expired ? .secondary : build.processingState.tint,
                         detail: build.uploadedDate.map { "Uploaded \(DisplayFormatters.relative($0))" },
                         secondaryDetail: build.expirationDate.map {
                             build.expired ? "Expired \(DisplayFormatters.relative($0))" : "Expires \(DisplayFormatters.relative($0))"
                         }
                     )
                 }
+                .accessibilityIdentifier("overview-builds")
                 .accessibilityHint("Opens builds and TestFlight details")
             } else if dashboard.sectionIssues[.builds] == nil {
                 Text("No builds are available for this platform.")
@@ -194,7 +203,7 @@ private struct AnalyticsOverviewSection: View {
             AnalyticsOverviewSnapshot(state: state)
             Button("View Analytics", systemImage: "chart.xyaxis.line", action: onOpen)
         } header: {
-            Text("Analytics Snapshot")
+            Text("Analytics Snapshot · All Platforms")
         } footer: {
             Text("Analytics uses cached Apple reports and never blocks this operational overview.")
         }
@@ -212,11 +221,16 @@ private struct OperationalStatusRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Group {
-                if dynamicTypeSize.isAccessibilitySize {
-                    VStack(alignment: .leading, spacing: 5) { headline }
-                } else {
-                    HStack(alignment: .firstTextBaseline) { headline }
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(title).font(.headline).foregroundStyle(.primary)
+                    statusLabel
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(title).font(.headline).foregroundStyle(.primary)
+                    Spacer(minLength: 6)
+                    statusLabel
                 }
             }
             if let detail {
@@ -230,12 +244,12 @@ private struct OperationalStatusRow: View {
         .accessibilityElement(children: .combine)
     }
 
-    @ViewBuilder private var headline: some View {
-        Text(title).font(.headline).foregroundStyle(.primary)
-        Spacer(minLength: 6)
-        Label(status, systemImage: symbol)
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(tint)
+    private var statusLabel: some View {
+        HStack(spacing: 5) {
+            Image(systemName: symbol).foregroundStyle(tint)
+            Text(status).foregroundStyle(.primary)
+        }
+        .font(.subheadline.weight(.semibold))
     }
 }
 
@@ -280,8 +294,10 @@ private struct AnalyticsOverviewSnapshot: View {
                 SnapshotValueRow(title: "Downloads", value: summary.totalDownloads)
                 SnapshotValueRow(title: "Impressions", value: summary.values[.impressions] ?? .notAvailable)
                 SnapshotValueRow(title: "Sessions", value: summary.values[.sessions] ?? .notAvailable)
-                if let through = summary.coverageEnd {
-                    Text("Last 7 days · data through \(through.date.formatted(date: .abbreviated, time: .omitted))")
+                if let through = summary.dataThroughByMetric[.firstTimeDownloads]
+                    ?? summary.dataThroughByMetric[.impressions]
+                    ?? summary.dataThroughByMetric[.sessions] {
+                    Text("Last 7 reported days · latest data through \(through.date.formatted(date: .abbreviated, time: .omitted))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)

@@ -27,7 +27,7 @@ struct OnboardingView: View {
                         OnboardingFact(
                             symbol: "lock.shield",
                             title: "Private by design",
-                            detail: "There is no ReviewBar account or backend. Requests go directly from this device to Apple."
+                            detail: "There is no ReviewBar account. Apple data requests go directly from this device; the optional notification relay never receives your API key."
                         )
                         OnboardingFact(
                             symbol: "key",

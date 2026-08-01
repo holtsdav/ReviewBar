@@ -1,61 +1,116 @@
 # App Store Connect API decisions
 
-ReviewBar was implemented against Apple’s official App Store Connect API documentation and release notes current on 2026-07-31 (API 4.4.1).
+ReviewBar 0.1.1 was checked against Apple’s official App Store Connect API documentation current on 2026-08-01. Core data is never scraped from App Store Connect or the public App Store.
 
 ## Authentication
 
 - [App Store Connect API setup](https://developer.apple.com/help/app-store-connect/get-started/app-store-connect-api/)
-- [Generating tokens for API requests](https://developer.apple.com/documentation/appstoreconnectapi/generating-tokens-for-api-requests)
+- [Generating tokens](https://developer.apple.com/documentation/appstoreconnectapi/generating-tokens-for-api-requests)
 - [Creating API keys](https://developer.apple.com/documentation/appstoreconnectapi/creating-api-keys-for-app-store-connect-api)
-- [Revoking API keys](https://developer.apple.com/documentation/appstoreconnectapi/revoking-api-keys)
 
-Team JWTs use `iss`; individual JWTs use the literal `sub: user` and omit `iss`. Both use an ES256 header containing `kid`, `iat`, `exp`, `aud: appstoreconnect-v1`, and optional request scope. Apple caps most lifetimes at 20 minutes; ReviewBar uses 10 minutes.
+Team JWTs use `iss`; individual JWTs use literal `sub: user` and omit `iss`. Both use ES256, `kid`, `iat`, `exp`, `aud: appstoreconnect-v1`, and an exact request scope. Apple caps most tokens at 20 minutes; ReviewBar uses ten minutes.
 
-## Resources
+## Apps, platforms, and icons
 
-### Apps
+- [`GET /v1/apps`](https://developer.apple.com/documentation/appstoreconnectapi/get-v1-apps)
+- [`Platform`](https://developer.apple.com/documentation/appstoreconnectapi/platform)
+- [`App.appStoreIcon`](https://developer.apple.com/documentation/appstoreconnectapi/app/relationships-data.dictionary/appstoreicon-data.dictionary)
+- [Build icons](https://developer.apple.com/documentation/appstoreconnectapi/build-icons)
 
-[`GET /v1/apps`](https://developer.apple.com/documentation/appstoreconnectapi/get-v1-apps) uses `filter[appStoreVersions.platform]=IOS`, pages with a limit of 200, and requests the `name`, `bundleId`, `sku`, and `primaryLocale` fields.
+The apps request has **no platform filter**. It requests `appStoreIcon`, includes the related `buildIcons` resource, follows all safe `links.next` pages, and deduplicates both apps and repeated included resources.
 
-### App Store versions and submissions
+Current platform values handled exactly are `IOS`, `MAC_OS`, `TV_OS`, and `VISION_OS`; unknown future values are retained as Other. iPadOS is represented by `IOS`. Apple models watch content through its parent app/build and icon bundle types rather than a separate `WATCH_OS` Platform value.
+
+Icon priority is:
+
+1. the app’s related official App Store icon;
+2. an `APP_STORE` icon from the newest suitable build;
+3. a deterministic generated local fallback.
+
+Apple `ImageAsset.templateUrl` placeholders `{w}`, `{h}`, and `{f}` may arrive percent encoded. ReviewBar resolves either form, requires HTTPS without user information, downloads from a separate unauthenticated session, verifies that ImageIO can decode the bytes, and caches them with a bounded disk policy.
+
+## App Store versions and submissions
 
 - [`GET /v1/apps/{id}/appStoreVersions`](https://developer.apple.com/documentation/appstoreconnectapi/get-v1-apps-_id_-appstoreversions)
-- [`AppVersionState`](https://developer.apple.com/documentation/appstoreconnectapi/appversionstate)
 - [`GET /v1/apps/{id}/reviewSubmissions`](https://developer.apple.com/documentation/appstoreconnectapi/get-v1-apps-_id_-reviewsubmissions)
-- [App and submission statuses](https://developer.apple.com/help/app-store-connect/reference/app-information/app-and-submission-statuses)
+- [`AppVersionState`](https://developer.apple.com/documentation/appstoreconnectapi/appversionstate)
 
-ReviewBar maps the current `appVersionState`, preserves unknown future raw values, and keeps the review submission state separate. The submission’s `submittedDate` is an Apple timestamp. `createdDate` is only record creation, and `earliestReleaseDate` is scheduling—not actual release—so neither is relabeled.
+No platform filter is applied. The current `appVersionState` is preserved, including unknown future raw values. Review-submission state remains separate from version state. `submittedDate` is authoritative for submission; `createdDate` is resource creation and `earliestReleaseDate` is scheduling, so neither is relabeled as a transition.
 
-### Customer reviews
+## Customer reviews
 
 - [`GET /v1/apps/{id}/customerReviews`](https://developer.apple.com/documentation/appstoreconnectapi/get-v1-apps-_id_-customerreviews)
-- [`CustomerReview` attributes](https://developer.apple.com/documentation/appstoreconnectapi/customerreview/attributes-data.dictionary)
-- [`CustomerReviewResponseV1` attributes](https://developer.apple.com/documentation/appstoreconnectapi/customerreviewresponsev1/attributes-data.dictionary)
+- [`CustomerReview`](https://developer.apple.com/documentation/appstoreconnectapi/customerreview/attributes-data.dictionary)
 
-The app requests rating, title, body, nickname, creation date, territory, and an included response. Included response state remains distinct (`PUBLISHED`, `PENDING_PUBLISH`, or a future preserved value). App-level review resources have no app-version attribute. ReviewBar’s networking module contains no POST, PATCH, or DELETE review operations.
+ReviewBar requests rating, title, body, reviewer nickname, creation date, territory, and included developer response. App-level customer reviews do not expose the reviewed app version, so the UI leaves that absent unless legitimate version context exists. ReviewBar has no review POST/PATCH/DELETE path and maintains unread state only on device.
 
-### Builds and TestFlight
+## Builds and TestFlight
 
 - [`GET /v1/builds`](https://developer.apple.com/documentation/appstoreconnectapi/get-v1-builds)
-- [`Build` attributes](https://developer.apple.com/documentation/appstoreconnectapi/build/attributes-data.dictionary)
+- [`Build`](https://developer.apple.com/documentation/appstoreconnectapi/build/attributes-data.dictionary)
 - [`InternalBetaState`](https://developer.apple.com/documentation/appstoreconnectapi/internalbetastate)
 - [`ExternalBetaState`](https://developer.apple.com/documentation/appstoreconnectapi/externalbetastate)
-- [`BetaReviewState`](https://developer.apple.com/documentation/appstoreconnectapi/betareviewstate)
 
-Build `version` is the build number. The related pre-release version supplies the marketing version and platform. Apple provides `filter[preReleaseVersion.platform]=IOS`; ReviewBar uses it and defensively verifies the mapped platform. It intentionally limits each dashboard refresh to Apple’s newest 200 iOS Build resources. `processingState` is preserved exactly; expiration uses Apple’s `expired` and `expirationDate`. TestFlight state and the App Store version relationship are labeled separately.
+Builds are filtered only by `filter[app]={id}`, not by iOS. The related pre-release version supplies marketing version and platform. Included beta detail, beta review submission, App Store version, and icons provide TestFlight/release context. ReviewBar requests 200 per page and follows Apple’s complete safe pagination chain so an iOS-heavy first page cannot hide later macOS, tvOS, visionOS, or still-relevant TestFlight builds.
 
-The separate [Build Uploads endpoint](https://developer.apple.com/documentation/appstoreconnectapi/get-v1-apps-_id_-builduploads) can represent a binary during Apple’s earliest upload/import stage, before a Build resource exists. Version 1.0 does not combine that resource, so an extremely recent upload appears after it reaches the Builds API.
+`processingState` is preserved exactly. `VALID` means Apple finished processing, not that the build is the only active TestFlight build. Expiration uses Apple’s `expired` and `expirationDate` fields. The separate `buildUploads` resource may represent a binary before its Build resource exists; ReviewBar currently begins showing it once it reaches Builds.
 
-`ACCEPTED` is retained as the current unreleased version: it means that submission item passed while another item may still prevent the overall submission from completing. ReviewBar does not relabel `ACCEPTED` as Ready for Distribution.
+## Analytics Reports
+
+- [Analytics Reports overview](https://developer.apple.com/documentation/analytics-reports)
+- [`analyticsReportRequests`](https://developer.apple.com/documentation/appstoreconnectapi/analyticsreportrequest)
+- [`analyticsReports`](https://developer.apple.com/documentation/appstoreconnectapi/analyticsreport)
+- [`analyticsReportInstances`](https://developer.apple.com/documentation/appstoreconnectapi/analyticsreportinstance)
+- [`analyticsReportSegments`](https://developer.apple.com/documentation/appstoreconnectapi/analyticsreportsegment)
+
+ReviewBar uses this official chain:
+
+```text
+GET  /v1/apps/{id}/analyticsReportRequests
+POST /v1/analyticsReportRequests                 (ONGOING, user initiated)
+GET  /v1/analyticsReportRequests/{id}/reports
+GET  /v1/analyticsReports/{id}/instances?filter[granularity]=DAILY
+GET  /v1/analyticsReportInstances/{id}/segments
+GET  /v1/analyticsReportSegments/{id}            (segment metadata when needed)
+GET  signed segment URL                           (gzip TSV; no Apple bearer)
+```
+
+Existing active ONGOING requests are preferred, with an active ONE_TIME_SNAPSHOT as fallback. Creating the first ongoing request can require Admin permission; ReviewBar surfaces that role requirement rather than a generic error. Stopped requests and still-generating reports remain distinct states.
+
+Segment URLs are short-lived downloads. ReviewBar validates HTTPS, uses an unauthenticated session, limits compressed/decompressed sizes, decompresses gzip, parses quoted tab-separated rows, validates each segment’s required schema, ignores unknown added columns, and aggregates reports incrementally. `processingDate` corrections replace the same report instance rather than double-counting it. Imported instance aggregates are cached because daily instances are retained for a limited period.
+
+Analytics update frequency and fields vary by report. The UI renders only metrics actually present and distinguishes exact zero, no rows, unavailable metric, and privacy-insufficient data. It does not infer unique counts, conversion, proceeds, or paying users from incompatible fields. Sales and Trends is a separate reporting system and is not used in 0.1.1.
+
+## Webhooks
+
+- [App Store Connect webhooks](https://developer.apple.com/documentation/appstoreconnectapi/webhooks)
+- [Webhook events](https://developer.apple.com/documentation/appstoreconnectapi/webhook-events)
+
+On-device configuration uses:
+
+```text
+POST   /v1/webhooks
+GET    /v1/apps/{id}/webhooks
+DELETE /v1/webhooks/{id}
+POST   /v1/webhookPings
+```
+
+The phone creates each webhook using its locally held App Store Connect credential. Supported notification choices are `APP_STORE_VERSION_APP_VERSION_STATE_UPDATED`, `BUILD_UPLOAD_STATE_UPDATED`, and `BUILD_BETA_DETAIL_EXTERNAL_BUILD_STATE_UPDATED`. The relay also understands Apple’s beta crash/screenshot feedback event types, but 0.1.1 keeps the product controls focused on release/build status.
+
+Apple signs the exact request body with HMAC-SHA256 in `x-apple-signature: hmacsha256=<hex>`. Redelivery uses the same event ID. App-version and external-build state events can contain an authoritative `attributes.timestamp`; build-upload events do not document one. No timestamp is synthesized. Apple documents no customer App Store review-created event.
+
+The callback URL is installation/channel-specific and is persisted before Apple creation. If a create response is lost or local persistence fails, ReviewBar lists the app's webhooks and matches that exact URL before cleanup, preventing an ambiguous Apple-side webhook from becoming orphaned. The relay’s normalized feed is oldest-first and uses an opaque tuple cursor rather than a timestamp-only watermark. ReviewBar records an app-version transition by its webhook instance ID and monitored app mapping even if the corresponding REST version has not appeared yet; the later REST refresh then supplies the display version without losing the authoritative transition time.
+
+Webhook management is limited to Account Holder, Admin, and App Manager, and Apple limits configurations per app. The UI reports role failures explicitly.
 
 ## Pagination and errors
 
 - [Paging information](https://developer.apple.com/documentation/appstoreconnectapi/paginginformation/paging-data.dictionary)
-- [Interpreting and handling errors](https://developer.apple.com/documentation/appstoreconnectapi/interpreting-and-handling-errors)
-- [Identifying rate limits](https://developer.apple.com/documentation/appstoreconnectapi/identifying-rate-limits)
+- [Handling errors](https://developer.apple.com/documentation/appstoreconnectapi/interpreting-and-handling-errors)
+- [Rate limits](https://developer.apple.com/documentation/appstoreconnectapi/identifying-rate-limits)
 
-ReviewBar follows `links.next` rather than constructing cursors, validates every next URL, stops repeated/overlong chains, and deduplicates resource IDs. It retries one 401 with a fresh token, then maps authentication, permission, rate-limit, service, network, and malformed-response failures separately. Apple does not document one fixed rate quota or guarantee `Retry-After`, so none is hardcoded.
+ReviewBar follows `links.next`, validates the exact Apple HTTPS host, rejects repeated/overlong chains, and deduplicates resource IDs. It retries one 401 with a fresh token and separately maps authentication, permission, rate-limit, service, network, and malformed-response failures. Apple publishes no single fixed account quota, so none is hardcoded.
 
-## Unsupported exactness
+## Remaining external limitations
 
-Apple’s ordinary read API does not expose exact timestamps for every release transition, a review queue estimate, build processing progress, an Apple-side unread flag, or one uniquely active TestFlight build. Apple webhooks can provide state-change events but require an HTTPS server; see [webhook events](https://developer.apple.com/documentation/appstoreconnectapi/webhook-events). ReviewBar has no backend, so these capabilities are not fabricated.
+Apple does not expose a review queue estimate, build-processing percentage/ETA, Apple-side unread review flag, one uniquely active TestFlight build, a customer-review webhook, or exact timestamps for every REST-visible state. ReviewBar does not fabricate them. Release history orders timestamp authority as Apple webhook, Apple API field, then labeled local observation.

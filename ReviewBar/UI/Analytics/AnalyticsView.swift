@@ -21,6 +21,8 @@ struct AnalyticsView: View {
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
+                        .accessibilityLabel("Analytics time range")
+                        .accessibilityValue(range.title)
                     }
                     stateContent(model.analyticsState(for: dashboard.id), appID: dashboard.id)
                 }
@@ -57,40 +59,36 @@ struct AnalyticsView: View {
             }
         case .available(let dataset):
             analyticsContent(dataset, refreshing: false)
-        case .notEnabled:
-            Section {
-                ContentUnavailableView {
-                    Label("Analytics Not Enabled", systemImage: "chart.xyaxis.line")
-                } description: {
-                    Text("Apple hasn't generated Analytics reports for this app. An Admin API key is required to create the initial ongoing report request.")
-                } actions: {
-                    Button("Enable Analytics") { Task { await model.enableAnalytics(appID: appID) } }
-                }
-            }
-        case .generating:
-            Section {
-                ContentUnavailableView {
-                    Label("Apple Is Preparing Reports", systemImage: "clock")
-                } description: {
-                    Text("Initial Analytics data normally takes 24–48 hours. Pull to refresh later; Overview and other data remain available.")
-                }
-            }
-        case .stoppedDueToInactivity:
-            Section {
-                ContentUnavailableView {
-                    Label("Report Generation Stopped", systemImage: "pause.circle")
-                } description: {
-                    Text("Apple stopped this request after a period of inactivity. An Admin can create a new ongoing request.")
-                } actions: {
-                    Button("Create New Request") { Task { await model.enableAnalytics(appID: appID) } }
-                }
-            }
-        case .permissionRequired(let message):
-            Section {
-                ContentUnavailableView {
-                    Label("Analytics Permission Required", systemImage: "lock")
-                } description: { Text(message) }
-            }
+        case .notEnabled(let cached):
+            statusContent(
+                title: "Analytics Not Enabled",
+                message: "Apple hasn't generated Analytics reports for this app. An Admin API key is required to create the initial ongoing report request.",
+                symbol: "chart.xyaxis.line",
+                cached: cached,
+                actionTitle: "Enable Analytics"
+            ) { Task { await model.enableAnalytics(appID: appID) } }
+        case .generating(let cached):
+            statusContent(
+                title: "Apple Is Preparing Reports",
+                message: "Initial Analytics data normally takes 24–48 hours. Pull to refresh later; existing cached data remains available.",
+                symbol: "clock",
+                cached: cached
+            )
+        case .stoppedDueToInactivity(let cached):
+            statusContent(
+                title: "Report Generation Stopped",
+                message: "Apple stopped this request after a period of inactivity. An Admin can create a new ongoing request.",
+                symbol: "pause.circle",
+                cached: cached,
+                actionTitle: "Create New Request"
+            ) { Task { await model.enableAnalytics(appID: appID) } }
+        case .permissionRequired(let message, let cached):
+            statusContent(
+                title: "Analytics Permission Required",
+                message: message,
+                symbol: "lock",
+                cached: cached
+            )
         case .failed(let message, let cached):
             if let cached {
                 Section { Label(message, systemImage: "exclamationmark.triangle") }
@@ -106,14 +104,60 @@ struct AnalyticsView: View {
     }
 
     @ViewBuilder
+    private func statusContent(
+        title: String,
+        message: String,
+        symbol: String,
+        cached: AnalyticsDataset?,
+        actionTitle: String? = nil,
+        action: @escaping () -> Void = {}
+    ) -> some View {
+        if let cached {
+            Section {
+                Label(title, systemImage: symbol).font(.headline)
+                Text(message).font(.subheadline).foregroundStyle(.secondary)
+                if let actionTitle { Button(actionTitle, action: action) }
+            } footer: {
+                Text("Showing the last Analytics data saved on this device.")
+            }
+            analyticsContent(cached, refreshing: false)
+        } else {
+            Section {
+                ContentUnavailableView {
+                    Label(title, systemImage: symbol)
+                } description: {
+                    Text(message)
+                } actions: {
+                    if let actionTitle { Button(actionTitle, action: action) }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
     private func analyticsContent(_ dataset: AnalyticsDataset, refreshing: Bool) -> some View {
         let summary = dataset.summary(range: range)
-        Section {
-            if let end = summary.coverageEnd {
-                LabeledContent("Data through", value: end.date.formatted(date: .abbreviated, time: .omitted))
+        if dataset.accessType == "ONE_TIME_SNAPSHOT" {
+            Section {
+                Label("One-Time Snapshot", systemImage: "camera.metering.partial")
+                    .font(.headline)
+                Text("These reports are a fixed snapshot. Create an ongoing request to keep Analytics updating.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Button("Start Ongoing Reports") {
+                    Task { await model.enableAnalytics(appID: dataset.appID) }
+                }
             }
-            if let start = summary.coverageStart, let end = summary.coverageEnd {
-                LabeledContent("Available coverage", value: "\(start.iso8601) – \(end.iso8601)")
+        }
+        Section {
+            let reportedDates = Set(summary.dataThroughByMetric.values)
+            if reportedDates.count == 1, let date = reportedDates.first {
+                LabeledContent("Data through", value: date.date.formatted(date: .abbreviated, time: .omitted))
+            } else if let latest = reportedDates.max() {
+                LabeledContent("Latest reported date", value: latest.date.formatted(date: .abbreviated, time: .omitted))
+                Text("Freshness varies by report; each metric group shows its own data-through date.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             if refreshing {
                 Label("Updating from Apple…", systemImage: "arrow.triangle.2.circlepath")
@@ -123,30 +167,43 @@ struct AnalyticsView: View {
             Text("Analytics is delayed and privacy-protected. The date above comes from report rows, not Apple's processing date.")
         }
 
+        if dataset.series.isEmpty {
+            Section {
+                ContentUnavailableView {
+                    Label("No Analytics Data", systemImage: "chart.xyaxis.line")
+                } description: {
+                    Text("Apple generated the report request, but it contains no supported metric rows yet. Pull to refresh after Apple publishes the next reports.")
+                }
+            }
+        }
+
         if let downloads = downloadChartPoints(summary), !downloads.isEmpty {
             Section("Downloads Trend") {
                 Chart(downloads) { point in
-                    LineMark(
+                    BarMark(
                         x: .value("Date", point.day.date),
                         y: .value("Downloads", point.value)
                     )
-                    .interpolationMethod(.catmullRom)
-                    AreaMark(
-                        x: .value("Date", point.day.date),
-                        y: .value("Downloads", point.value)
-                    )
-                    .foregroundStyle(.tint.opacity(0.12))
+                    .foregroundStyle(.tint)
                 }
                 .chartYAxis { AxisMarks(position: .leading) }
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: range == .sevenDays ? 4 : 3)) {
+                        AxisGridLine()
+                        AxisTick()
+                        AxisValueLabel(format: .dateTime.month(.abbreviated).day())
+                    }
+                }
                 .frame(minHeight: 170)
                 .accessibilityLabel("Downloads over \(range.title)")
+                .accessibilityValue(downloadChartAccessibilityValue(downloads))
             }
         }
 
         ForEach(AnalyticsMetricCategory.allCases, id: \.self) { category in
             let metrics = visibleMetrics(in: category, summary: summary)
             if !metrics.isEmpty || (category == .downloads && summary.totalDownloads != .notAvailable) {
-                Section(category.rawValue) {
+                Section {
                     if category == .downloads {
                         AnalyticsMetricRow(title: "Total Downloads", value: summary.totalDownloads, unit: .count)
                     }
@@ -156,6 +213,12 @@ struct AnalyticsView: View {
                             value: summary.values[metric] ?? .notAvailable,
                             unit: metric.unit
                         )
+                    }
+                } header: {
+                    Text(category.rawValue)
+                } footer: {
+                    if let freshness = freshnessDescription(for: metrics, summary: summary) {
+                        Text(freshness)
                     }
                 }
             }
@@ -191,6 +254,29 @@ struct AnalyticsView: View {
             byDay[point.day] = AnalyticsMetricPoint(day: point.day, value: old + point.value, processingDay: point.processingDay)
         }
         return byDay.values.sorted { $0.day < $1.day }
+    }
+
+    private func freshnessDescription(
+        for metrics: [AnalyticsMetricID],
+        summary: AnalyticsSummary
+    ) -> String? {
+        let relevant = metrics + (metrics.first?.category == .downloads ? [.firstTimeDownloads, .redownloads] : [])
+        let dates = Set(relevant.compactMap { summary.dataThroughByMetric[$0] })
+        guard !dates.isEmpty else { return nil }
+        if dates.count == 1, let date = dates.first {
+            return "Data through \(date.date.formatted(date: .abbreviated, time: .omitted))."
+        }
+        return dates.sorted().map { $0.date.formatted(date: .abbreviated, time: .omitted) }
+            .joined(separator: " – ")
+            .appending(" data-through range; individual reports update at different times.")
+    }
+
+    private func downloadChartAccessibilityValue(_ points: [AnalyticsMetricPoint]) -> String {
+        let total = points.reduce(0) { $0 + $1.value }
+        guard let first = points.first?.day, let last = points.last?.day else {
+            return "No reported downloads."
+        }
+        return "\(total.formatted(.number.precision(.fractionLength(0)))) total downloads from \(first.iso8601) through \(last.iso8601), across \(points.count) reported days."
     }
 }
 

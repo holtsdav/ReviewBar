@@ -27,7 +27,10 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
             URLQueryItem(name: "limit", value: "200")
         ])
         let pages: ([AppAPIResource], [BuildIconAPIResource]) = try await fetchAllPages(from: url)
-        let iconsByID = Dictionary(uniqueKeysWithValues: pages.1.map { ($0.id, $0) })
+        let iconsByID = Dictionary(
+            pages.1.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
         var seen: Set<String> = []
         return pages.0.compactMap { resource -> DeveloperApp? in
             guard seen.insert(resource.id).inserted else { return nil }
@@ -153,9 +156,10 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
             URLQueryItem(name: "sort", value: "-uploadedDate"),
             URLQueryItem(name: "limit", value: "200")
         ])
-        // The dashboard intentionally limits builds to Apple's newest 200. Fetching an
-        // account's complete build history on every foreground refresh is wasteful.
-        let pages: ([BuildAPIResource], [BuildIncludedAPIResource]) = try await fetchPage(from: url)
+        // Apple can split platforms across pages. Follow the complete safe
+        // pagination chain so an iOS-heavy app cannot hide its macOS/tvOS/
+        // visionOS or older still-active TestFlight builds.
+        let pages: ([BuildAPIResource], [BuildIncludedAPIResource]) = try await fetchAllPages(from: url)
 
         var preReleases: [String: BuildIncludedAPIResource.PreReleaseVersion] = [:]
         var betaDetails: [String: BuildIncludedAPIResource.BetaDetail] = [:]
@@ -201,7 +205,7 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
         let sortedBuilds = mappedBuilds.sorted { lhs, rhs in
             (lhs.uploadedDate ?? .distantPast) > (rhs.uploadedDate ?? .distantPast)
         }
-        let resourcesByID = Dictionary(uniqueKeysWithValues: pages.0.map { ($0.id, $0) })
+        let resourcesByID = Dictionary(pages.0.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let fallbackIcon = sortedBuilds.lazy.compactMap { build -> AppIconAsset? in
             guard let resource = resourcesByID[build.id] else { return nil }
             return resource.relationships?.icons?.data.lazy
@@ -280,15 +284,6 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
             pageCount += 1
         }
         return (resources, included)
-    }
-
-    private func fetchPage<Resource: Decodable & Sendable, Included: Decodable & Sendable>(
-        from url: URL
-    ) async throws -> ([Resource], [Included]) {
-        try Task.checkCancellation()
-        let response = try await transport.get(url)
-        let page = try AppleAPIDecoder.make().decode(JSONAPIPage<Resource, Included>.self, from: response.data)
-        return (page.data, page.included ?? [])
     }
 
     private func capture<Value: Sendable>(

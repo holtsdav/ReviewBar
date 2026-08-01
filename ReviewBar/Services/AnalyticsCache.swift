@@ -19,11 +19,23 @@ actor AnalyticsCache: AnalyticsCaching {
     func load(appID: String) throws -> AnalyticsDataset? {
         let url = fileURL(appID: appID)
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        return try decoder.decode(AnalyticsDataset.self, from: Data(contentsOf: url))
+        let data = try Data(contentsOf: url)
+        do {
+            return try decoder.decode(AnalyticsDataset.self, from: data)
+        } catch is DecodingError {
+            // A truncated/obsolete cache must never permanently block a fresh
+            // report download. Preserve actual filesystem/protection errors.
+            try FileManager.default.removeItem(at: url)
+            return nil
+        }
     }
 
     func save(_ dataset: AnalyticsDataset) throws {
         try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var protectedDirectory = directoryURL
+        try? protectedDirectory.setResourceValues(values)
         try encoder.encode(dataset).write(
             to: fileURL(appID: dataset.appID),
             options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]

@@ -70,6 +70,9 @@ actor DashboardRepository {
             }
             if dashboards[index].sectionIssues[.builds] != nil {
                 dashboards[index].builds = saved.builds
+                if dashboards[index].app.iconAsset == nil {
+                    dashboards[index].app.iconAsset = saved.app.iconAsset
+                }
                 dashboards[index].sectionIssues[.builds] = dashboards[index].sectionIssues[.builds]?
                     .fallingBackToCache(from: saved.sectionIssues[.builds]?.cachedAt ?? saved.fetchedAt)
                 usedCachedSection = true

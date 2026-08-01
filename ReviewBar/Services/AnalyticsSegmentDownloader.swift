@@ -7,7 +7,10 @@ enum AnalyticsSegmentDownloadError: Error {
 
 actor AnalyticsSegmentDownloader {
     private let session: URLSession
-    private let maximumCompressedBytes = 64 * 1_024 * 1_024
+    // The parser streams bytes into rows but report-specific aggregation still
+    // retains normalized rows. Bound both archive and inflated data to keep the
+    // peak deterministic on small iPhones.
+    private let maximumCompressedBytes = 16 * 1_024 * 1_024
 
     init(session: URLSession? = nil) {
         if let session {

@@ -6,22 +6,21 @@ struct TSVDocument: Equatable, Sendable {
 
     static func parse(_ data: Data) throws -> TSVDocument {
         guard !data.isEmpty else { return TSVDocument(headers: [], rows: []) }
-        guard var text = String(data: data, encoding: .utf8) else {
-            throw AppError(kind: .malformedResponse, message: "An Analytics report wasn't valid UTF-8 text.")
-        }
-        if text.unicodeScalars.first?.value == 0xFEFF { text.removeFirst() }
-        let records = try parseRecords(text)
-        guard let first = records.first else { return TSVDocument(headers: [], rows: []) }
-        let headers = first.map(normalizedHeader)
-        guard headers.allSatisfy({ !$0.isEmpty }), Set(headers).count == headers.count else {
-            throw AppError(kind: .malformedResponse, message: "An Analytics report contained missing or duplicate columns.")
-        }
+        var headers: [String] = []
         var rows: [[String: String]] = []
-        for record in records.dropFirst() where !(record.count == 1 && record[0].isEmpty) {
-            guard record.count == headers.count else {
-                throw AppError(kind: .malformedResponse, message: "An Analytics report row didn't match its header schema.")
+
+        try parseRecords(data) { record in
+            if headers.isEmpty {
+                headers = record.map(normalizedHeader)
+                guard headers.allSatisfy({ !$0.isEmpty }), Set(headers).count == headers.count else {
+                    throw AppError(kind: .malformedResponse, message: "An Analytics report contained missing or duplicate columns.")
+                }
+            } else if !(record.count == 1 && record[0].isEmpty) {
+                guard record.count == headers.count else {
+                    throw AppError(kind: .malformedResponse, message: "An Analytics report row didn't match its header schema.")
+                }
+                rows.append(Dictionary(uniqueKeysWithValues: zip(headers, record)))
             }
-            rows.append(Dictionary(uniqueKeysWithValues: zip(headers, record)))
         }
         return TSVDocument(headers: headers, rows: rows)
     }
@@ -33,51 +32,69 @@ struct TSVDocument: Equatable, Sendable {
             .lowercased()
     }
 
-    private static func parseRecords(_ text: String) throws -> [[String]] {
-        var records: [[String]] = []
+    /// Parses directly from UTF-8 bytes so the decompressed `Data`, a second
+    /// full-size `String`, and a complete intermediate record matrix are never
+    /// retained simultaneously.
+    private static func parseRecords(
+        _ data: Data,
+        consume: ([String]) throws -> Void
+    ) throws {
         var record: [String] = []
-        var field = ""
+        var field: [UInt8] = []
         var quoted = false
-        var index = text.startIndex
-        while index < text.endIndex {
-            let character = text[index]
-            let next = text.index(after: index)
+        var index = 0
+        if data.count >= 3, data[0] == 0xEF, data[1] == 0xBB, data[2] == 0xBF { index = 3 }
+
+        func finishField() throws {
+            guard let value = String(bytes: field, encoding: .utf8) else {
+                throw AppError(kind: .malformedResponse, message: "An Analytics report wasn't valid UTF-8 text.")
+            }
+            record.append(value)
+            field.removeAll(keepingCapacity: true)
+        }
+
+        func finishRecord() throws {
+            try finishField()
+            try consume(record)
+            record.removeAll(keepingCapacity: true)
+        }
+
+        while index < data.count {
+            if index.isMultiple(of: 16 * 1_024) { try Task.checkCancellation() }
+            let byte = data[index]
             if quoted {
-                if character == "\"" {
-                    if next < text.endIndex, text[next] == "\"" {
-                        field.append("\"")
-                        index = text.index(after: next)
+                if byte == 0x22 {
+                    if index + 1 < data.count, data[index + 1] == 0x22 {
+                        field.append(0x22)
+                        index += 2
                         continue
                     }
                     quoted = false
                 } else {
-                    field.append(character)
+                    field.append(byte)
                 }
             } else {
-                switch character {
-                case "\"" where field.isEmpty:
+                switch byte {
+                case 0x22 where field.isEmpty:
                     quoted = true
-                case "\t":
-                    record.append(field)
-                    field = ""
-                case "\n":
-                    record.append(field.trimmingCharacters(in: CharacterSet(charactersIn: "\r")))
-                    records.append(record)
-                    record = []
-                    field = ""
+                case 0x09:
+                    try finishField()
+                case 0x0A:
+                    try finishRecord()
+                case 0x0D:
+                    try finishRecord()
+                    if index + 1 < data.count, data[index + 1] == 0x0A { index += 1 }
                 default:
-                    field.append(character)
+                    field.append(byte)
                 }
             }
-            index = next
+            index += 1
         }
         guard !quoted else {
             throw AppError(kind: .malformedResponse, message: "An Analytics report contained an unterminated quoted value.")
         }
         if !field.isEmpty || !record.isEmpty {
-            record.append(field.trimmingCharacters(in: CharacterSet(charactersIn: "\r")))
-            records.append(record)
+            try finishRecord()
         }
-        return records
     }
 }

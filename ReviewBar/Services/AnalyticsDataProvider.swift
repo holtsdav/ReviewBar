@@ -3,6 +3,13 @@ import Foundation
 protocol AnalyticsDataProviding: Sendable {
     func fetchAnalytics(appID: String) async throws -> AnalyticsFetchResult
     func createOngoingRequest(appID: String) async throws
+    func clearImportedData() async throws
+    func importedDataSizeInBytes() async -> Int64
+}
+
+extension AnalyticsDataProviding {
+    func clearImportedData() async throws {}
+    func importedDataSizeInBytes() async -> Int64 { 0 }
 }
 
 protocol AnalyticsCaching: Sendable {
@@ -16,6 +23,8 @@ actor AnalyticsRepository {
     private let provider: any AnalyticsDataProviding
     private let cache: any AnalyticsCaching
     private var inFlight: [String: Task<AnalyticsFetchResult, Error>] = [:]
+    private var generation = 0
+    private var isResetting = false
 
     init(provider: any AnalyticsDataProviding, cache: any AnalyticsCaching) {
         self.provider = provider
@@ -23,29 +32,34 @@ actor AnalyticsRepository {
     }
 
     func cached(appID: String) async throws -> AnalyticsDataset? {
-        try await cache.load(appID: appID)
+        guard !isResetting else { return nil }
+        return try await cache.load(appID: appID)
     }
 
     func refresh(appID: String) async throws -> AnalyticsFetchResult {
+        guard !isResetting else { throw CancellationError() }
         if let task = inFlight[appID] { return try await task.value }
+        let expectedGeneration = generation
         let provider = self.provider
-        let task = Task { try await provider.fetchAnalytics(appID: appID) }
+        let cache = self.cache
+        let task = Task<AnalyticsFetchResult, Error> {
+            let result = try await provider.fetchAnalytics(appID: appID)
+            try Task.checkCancellation()
+            guard case .dataset(var incoming) = result else { return result }
+            if var existing = try await cache.load(appID: appID) {
+                existing.merge(incoming)
+                incoming = existing
+            }
+            try Task.checkCancellation()
+            try await cache.save(incoming)
+            return .dataset(incoming)
+        }
         inFlight[appID] = task
         do {
             let result = try await task.value
-            let merged: AnalyticsFetchResult
-            if case .dataset(var incoming) = result {
-                if var existing = try await cache.load(appID: appID) {
-                    existing.merge(incoming)
-                    incoming = existing
-                }
-                try await cache.save(incoming)
-                merged = .dataset(incoming)
-            } else {
-                merged = result
-            }
+            guard generation == expectedGeneration else { throw CancellationError() }
             inFlight[appID] = nil
-            return merged
+            return result
         } catch {
             inFlight[appID] = nil
             throw error
@@ -57,10 +71,32 @@ actor AnalyticsRepository {
     }
 
     func clear() async throws {
-        for task in inFlight.values { task.cancel() }
-        inFlight = [:]
+        guard !isResetting else { return }
+        isResetting = true
+        defer { isResetting = false }
+        await cancelTasks()
+        try await provider.clearImportedData()
         try await cache.clear()
     }
 
-    func sizeInBytes() async -> Int64 { await cache.sizeInBytes() }
+    func cancelInFlight() async {
+        guard !isResetting else { return }
+        isResetting = true
+        defer { isResetting = false }
+        await cancelTasks()
+    }
+
+    private func cancelTasks() async {
+        generation += 1
+        let tasks = Array(inFlight.values)
+        for task in tasks { task.cancel() }
+        for task in tasks { _ = try? await task.value }
+        inFlight = [:]
+    }
+
+    func sizeInBytes() async -> Int64 {
+        let cacheBytes = await cache.sizeInBytes()
+        let importedBytes = await provider.importedDataSizeInBytes()
+        return cacheBytes + importedBytes
+    }
 }

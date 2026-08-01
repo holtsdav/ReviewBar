@@ -92,6 +92,63 @@ struct PersistenceTests {
         #expect(await store.observations(for: release.id).isEmpty)
     }
 
+    @Test("Apple webhook timestamps replace same-state local observations and deduplicate delivery")
+    func authoritativeReleaseHistory() async throws {
+        let store = ReleaseHistoryStore()
+        let release = DemoFixtures.dashboards[0].releases[0]
+        let authoritativeTime = Date(timeIntervalSince1970: 1_700_000_000)
+        try await store.record(
+            [copy(release, state: .inReview)],
+            appID: "app",
+            at: authoritativeTime.addingTimeInterval(300)
+        )
+        try await store.recordAuthoritative(
+            eventID: "event-1",
+            appID: "app",
+            releaseID: release.id,
+            version: release.version,
+            state: .inReview,
+            occurredAt: authoritativeTime,
+            source: .appleWebhook
+        )
+        try await store.recordAuthoritative(
+            eventID: "event-1",
+            appID: "app",
+            releaseID: release.id,
+            version: release.version,
+            state: .inReview,
+            occurredAt: authoritativeTime,
+            source: .appleWebhook
+        )
+
+        let observations = await store.observations(for: release.id)
+        #expect(observations.count == 1)
+        #expect(observations[0].source == .appleWebhook)
+        #expect(observations[0].observedAt == authoritativeTime)
+        #expect(observations[0].externalEventID == "event-1")
+    }
+
+    @Test("Realtime state migrates old records and persists provisional cleanup identifiers")
+    func realtimePendingCleanupPersistence() throws {
+        let legacy = Data(#"{"id":"installation","token":"bearer","channels":[]}"#.utf8)
+        let migrated = try JSONDecoder().decode(RealtimeInstallation.self, from: legacy)
+        #expect(migrated.pendingCleanup.isEmpty)
+
+        var current = migrated
+        current.pendingCleanup = [RealtimePendingCleanup(
+            id: "relay-channel",
+            appID: "app",
+            appName: "Universal App",
+            webhookURL: URL(string: "https://relay.example/apple/relay-channel"),
+            appleWebhookIDs: ["apple-webhook"]
+        )]
+        let roundTrip = try JSONDecoder().decode(
+            RealtimeInstallation.self,
+            from: JSONEncoder().encode(current)
+        )
+        #expect(roundTrip.pendingCleanup == current.pendingCleanup)
+    }
+
     private func copy(_ release: AppRelease, state: ReleaseState) -> AppRelease {
         AppRelease(
             id: release.id,

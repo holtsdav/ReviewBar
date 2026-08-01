@@ -1,0 +1,20 @@
+{
+  "name": "reviewbar-notification-relay",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "types": "wrangler types",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.20.1",
+    "@cloudflare/workers-types": "^5.20260801.1",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.2",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.113.0"
+  }
+}

@@ -3,6 +3,7 @@ import Foundation
 struct AppStoreConnectAnalyticsProvider: AnalyticsDataProviding, Sendable {
     private let transport: AppleAPITransport
     private let downloader: AnalyticsSegmentDownloader
+    private let instanceCache: any AnalyticsInstanceCaching
     private let baseURL: URL
 
     init(credential: AppStoreConnectCredential) throws {
@@ -11,13 +12,20 @@ struct AppStoreConnectAnalyticsProvider: AnalyticsDataProviding, Sendable {
         }
         transport = AppleAPITransport(signer: try JWTGenerator(credential: credential))
         downloader = AnalyticsSegmentDownloader()
+        instanceCache = AnalyticsInstanceCache()
         self.baseURL = baseURL
     }
 
-    init(transport: AppleAPITransport, downloader: AnalyticsSegmentDownloader, baseURL: URL) {
+    init(
+        transport: AppleAPITransport,
+        downloader: AnalyticsSegmentDownloader,
+        baseURL: URL,
+        instanceCache: any AnalyticsInstanceCaching = MemoryAnalyticsInstanceCache()
+    ) {
         self.transport = transport
         self.downloader = downloader
         self.baseURL = baseURL
+        self.instanceCache = instanceCache
     }
 
     func fetchAnalytics(appID: String) async throws -> AnalyticsFetchResult {
@@ -27,7 +35,8 @@ struct AppStoreConnectAnalyticsProvider: AnalyticsDataProviding, Sendable {
         ])
         let requests: [AnalyticsReportRequestAPIResource] = try await fetchAllPages(from: requestsURL)
         let ongoing = requests.first { $0.attributes.accessType == "ONGOING" && $0.attributes.stoppedDueToInactivity != true }
-        guard let request = ongoing else {
+        let snapshot = requests.first { $0.attributes.accessType == "ONE_TIME_SNAPSHOT" }
+        guard let request = ongoing ?? snapshot else {
             if requests.contains(where: { $0.attributes.accessType == "ONGOING" && $0.attributes.stoppedDueToInactivity == true }) {
                 return .stoppedDueToInactivity
             }
@@ -41,12 +50,25 @@ struct AppStoreConnectAnalyticsProvider: AnalyticsDataProviding, Sendable {
         let allReports: [AnalyticsReportAPIResource] = try await fetchAllPages(from: reportsURL)
         let reports = allReports.filter { AnalyticsReportAggregator.isSupportedReport($0.attributes.name) }
         guard !allReports.isEmpty else { return .generating }
+        if reports.isEmpty {
+            return .dataset(AnalyticsDataset(
+                appID: appID,
+                requestID: request.id,
+                accessType: request.attributes.accessType,
+                series: [],
+                fetchedAt: .now,
+                warnings: ["Apple returned Analytics report types this version of ReviewBar doesn't recognize yet."]
+            ))
+        }
 
         var series: [AnalyticsMetricSeries] = []
         var warnings: [String] = []
-        for batchStart in stride(from: 0, to: reports.count, by: 3) {
+        // Import one report at a time. TSV rows are intentionally bounded but
+        // still retained for report-specific aggregation, so parallel imports
+        // would multiply peak memory without improving the quick-check UX.
+        for batchStart in stride(from: 0, to: reports.count, by: 1) {
             try Task.checkCancellation()
-            let batch = Array(reports[batchStart..<min(batchStart + 3, reports.count)])
+            let batch = Array(reports[batchStart..<min(batchStart + 1, reports.count)])
             let results = await withTaskGroup(of: ReportImportResult.self) { group in
                 for report in batch {
                     group.addTask {
@@ -55,7 +77,7 @@ struct AppStoreConnectAnalyticsProvider: AnalyticsDataProviding, Sendable {
                         } catch is CancellationError {
                             return .cancelled
                         } catch {
-                            return .failure(report.attributes.name, AppError.map(error).message)
+                            return .failure(report.attributes.name, AppError.map(error))
                         }
                     }
                 }
@@ -66,7 +88,12 @@ struct AppStoreConnectAnalyticsProvider: AnalyticsDataProviding, Sendable {
             for result in results {
                 switch result {
                 case .success(_, let imported): merge(imported, into: &series)
-                case .failure(let name, let message): warnings.append("\(name): \(message)")
+                case .failure(let name, let error):
+                    if error.kind == .malformedResponse {
+                        warnings.append("\(name): \(error.message)")
+                    } else {
+                        throw error
+                    }
                 case .cancelled: throw CancellationError()
                 }
             }
@@ -98,6 +125,14 @@ struct AppStoreConnectAnalyticsProvider: AnalyticsDataProviding, Sendable {
         _ = try await transport.post(url, body: body)
     }
 
+    func clearImportedData() async throws {
+        try await instanceCache.clear()
+    }
+
+    func importedDataSizeInBytes() async -> Int64 {
+        await instanceCache.sizeInBytes()
+    }
+
     private func fetchReport(_ report: AnalyticsReportAPIResource) async throws -> [AnalyticsMetricSeries] {
         let instancesURL = try makeURL(path: "analyticsReports/\(report.id)/instances", query: [
             URLQueryItem(name: "filter[granularity]", value: "DAILY"),
@@ -106,18 +141,9 @@ struct AppStoreConnectAnalyticsProvider: AnalyticsDataProviding, Sendable {
         ])
         let instances: [AnalyticsReportInstanceAPIResource] = try await fetchAllPages(from: instancesURL)
         var imported: [AnalyticsMetricSeries] = []
-        for batchStart in stride(from: 0, to: instances.count, by: 4) {
+        for instance in instances {
             try Task.checkCancellation()
-            let batch = Array(instances[batchStart..<min(batchStart + 4, instances.count)])
-            let chunks = try await withThrowingTaskGroup(of: [AnalyticsMetricSeries].self) { group in
-                for instance in batch {
-                    group.addTask { try await fetchInstance(instance, reportName: report.attributes.name) }
-                }
-                var values: [[AnalyticsMetricSeries]] = []
-                for try await value in group { values.append(value) }
-                return values
-            }
-            for chunk in chunks { merge(chunk, into: &imported) }
+            merge(try await fetchInstance(instance, reportName: report.attributes.name), into: &imported)
         }
         return imported
     }
@@ -130,9 +156,15 @@ struct AppStoreConnectAnalyticsProvider: AnalyticsDataProviding, Sendable {
               let processingDay = AnalyticsDay(iso8601: instance.attributes.processingDate) else {
             throw AppError(kind: .malformedResponse, message: "Apple returned an invalid Analytics processing date.")
         }
+        if let cached = try await instanceCache.load(
+            instanceID: instance.id,
+            reportName: reportName,
+            processingDay: processingDay
+        ) {
+            return cached
+        }
         let segments = try await fetchSegments(instanceID: instance.id)
-        var documents: [TSVDocument] = []
-        documents.reserveCapacity(segments.count)
+        var series: [AnalyticsMetricSeries] = []
         for segment in segments {
             try Task.checkCancellation()
             let compressed: Data
@@ -142,13 +174,42 @@ struct AppStoreConnectAnalyticsProvider: AnalyticsDataProviding, Sendable {
                 let refreshed = try await fetchSegment(id: segment.id)
                 compressed = try await downloader.download(refreshed)
             }
-            documents.append(try TSVDocument.parse(GzipDecoder.decompress(compressed)))
+            let document = try TSVDocument.parse(GzipDecoder.decompress(compressed))
+            let imported = try AnalyticsReportAggregator.aggregate(
+                reportName: reportName,
+                processingDay: processingDay,
+                documents: [document]
+            )
+            combineSegments(imported, into: &series)
         }
-        return try AnalyticsReportAggregator.aggregate(
-            reportName: reportName,
-            processingDay: processingDay,
-            documents: documents
+        try await instanceCache.save(
+            AnalyticsInstanceArchive(reportName: reportName, processingDay: processingDay, series: series),
+            instanceID: instance.id
         )
+        return series
+    }
+
+    private func combineSegments(
+        _ incoming: [AnalyticsMetricSeries],
+        into existing: inout [AnalyticsMetricSeries]
+    ) {
+        for segmentSeries in incoming {
+            guard let index = existing.firstIndex(where: { $0.metric == segmentSeries.metric }) else {
+                existing.append(segmentSeries)
+                continue
+            }
+            var points = Dictionary(uniqueKeysWithValues: existing[index].points.map { ($0.day, $0) })
+            for point in segmentSeries.points {
+                let saved = points[point.day]
+                points[point.day] = AnalyticsMetricPoint(
+                    day: point.day,
+                    value: (saved?.value ?? 0) + point.value,
+                    processingDay: max(saved?.processingDay ?? point.processingDay, point.processingDay)
+                )
+            }
+            existing[index].points = points.values.sorted { $0.day < $1.day }
+            if segmentSeries.availability == .available { existing[index].availability = .available }
+        }
     }
 
     private func fetchSegments(instanceID: String) async throws -> [AnalyticsReportSegmentAPIResource] {
@@ -220,6 +281,6 @@ struct AppStoreConnectAnalyticsProvider: AnalyticsDataProviding, Sendable {
 
 private enum ReportImportResult: Sendable {
     case success(String, [AnalyticsMetricSeries])
-    case failure(String, String)
+    case failure(String, AppError)
     case cancelled
 }

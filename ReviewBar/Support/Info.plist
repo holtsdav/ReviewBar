@@ -24,6 +24,8 @@
 	<false/>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.developer-tools</string>
+	<key>ReviewBarRelayBaseURL</key>
+	<string>$(REVIEWBAR_RELAY_BASE_URL)</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIFileSharingEnabled</key>

@@ -1,0 +1,38 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "reviewbar-notification-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-31",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "observability": { "enabled": true },
+  "vars": {
+    "PUBLIC_BASE_URL": "https://relay.reviewbar.example",
+    "APNS_TOPIC": "com.reviewbar.ReviewBar"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "reviewbar-relay",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "queues": {
+    "producers": [
+      { "binding": "EVENTS_QUEUE", "queue": "reviewbar-webhook-events" }
+    ],
+    "consumers": [
+      {
+        "queue": "reviewbar-webhook-events",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "dead_letter_queue": "reviewbar-webhook-events-dlq"
+      }
+    ]
+  },
+  "triggers": {
+    "crons": ["17 * * * *"]
+  }
+}

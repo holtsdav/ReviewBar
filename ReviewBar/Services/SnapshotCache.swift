@@ -31,6 +31,10 @@ actor SnapshotCache: SnapshotCaching {
     func save(_ collection: DashboardCollection) throws {
         let directory = fileURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var protectedDirectory = directory
+        try? protectedDirectory.setResourceValues(values)
         let data = try encoder.encode(collection)
         try data.write(to: fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }

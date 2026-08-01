@@ -75,7 +75,7 @@ actor AppleAPITransport {
             throw AppError(kind: .malformedResponse, message: "Apple returned an unexpected network response.")
         }
 
-        if (200..<300).contains(http.statusCode) {
+        if (200..<300).contains(http.statusCode) || (method == "DELETE" && http.statusCode == 404) {
             return AppleAPIResponse(
                 data: data,
                 rateLimitRemaining: Self.rateLimitRemaining(from: http.value(forHTTPHeaderField: "X-Rate-Limit"))
@@ -126,19 +126,22 @@ enum AppleHTTPErrorMapper {
         case 401:
             return AppError(
                 kind: .invalidCredentials,
-                message: "Apple could not authenticate this key. Check its key type and IDs, or create a replacement if it was revoked."
+                message: "Apple could not authenticate this key. Check its key type and IDs, or create a replacement if it was revoked.",
+                requestWasRejected: true
             )
         case 403:
             return AppError(
                 kind: .insufficientPermission,
-                message: "Apple denied this request. Check that the key is active and its App Store Connect user can view this app and feature."
+                message: "Apple denied this request. Check that the key is active and its App Store Connect user can view this app and feature.",
+                requestWasRejected: true
             )
         case 429:
             let retryAfter = retryAfterHeader.flatMap(TimeInterval.init)
             return AppError(
                 kind: .rateLimited(retryAfter: retryAfter),
                 message: retryAfter.map { "Apple asked ReviewBar to wait about \(Int($0)) seconds before refreshing again." }
-                    ?? "Apple has temporarily rate limited this key. ReviewBar will keep the cached data available."
+                    ?? "Apple has temporarily rate limited this key. ReviewBar will keep the cached data available.",
+                requestWasRejected: true
             )
         case 500...599:
             return AppError(
@@ -149,7 +152,8 @@ enum AppleHTTPErrorMapper {
             let suffix = appleCode.map { " (Apple code: \($0))" } ?? ""
             return AppError(
                 kind: .other,
-                message: "Apple rejected the request\(suffix). Your cached data is unchanged."
+                message: "Apple rejected the request\(suffix). Your cached data is unchanged.",
+                requestWasRejected: (400..<500).contains(statusCode)
             )
         }
     }

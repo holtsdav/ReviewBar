@@ -12,6 +12,9 @@ xcuserdata/
 .swiftpm/
 Package.resolved
 
+# Node
+node_modules/
+
 # Secrets and imported App Store Connect keys
 *.p8
 AuthKey_*.p8
@@ -19,6 +22,10 @@ AuthKey_*.p8
 *.key
 .env
 .env.*
+.dev.vars
+.dev.vars.*
+.wrangler/
+NotificationRelay/worker-configuration.d.ts
 Credentials/
 Secrets.xcconfig
 

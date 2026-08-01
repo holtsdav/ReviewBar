@@ -101,10 +101,11 @@ struct SettingsView: View {
             } label: {
                 SettingsValueRow(
                     title: "Real-Time Status Updates",
-                    value: "Off",
+                    value: realtimeStatus,
                     symbol: "bell.badge"
                 )
             }
+            .accessibilityIdentifier("settings-realtime-updates")
         } header: {
             Text("Notifications")
         } footer: {
@@ -133,6 +134,11 @@ struct SettingsView: View {
 
     private var privacySection: some View {
         Section("Data & Privacy") {
+            NavigationLink {
+                PrivacyPolicyView()
+            } label: {
+                Label("Privacy Policy", systemImage: "hand.raised")
+            }
             Button("How ReviewBar Protects Your Key", systemImage: "lock.shield") {
                 showingSecurity = true
             }
@@ -169,7 +175,7 @@ struct SettingsView: View {
                 ("Release timing", "ReviewBar prefers exact Apple webhook timestamps, then Apple API dates, then clearly labeled locally observed changes. Not every Apple event includes a transition timestamp."),
                 ("Reviews", "Apple does not currently offer a customer App Store review-created webhook. Review notifications cannot be real-time; unread state remains device-local."),
                 ("Analytics", "Analytics Reports are delayed, may take 24–48 hours to appear initially, and retain daily report instances for a limited period. ReviewBar always shows the actual data-through date."),
-                ("Build history", "To keep refreshes efficient, ReviewBar loads Apple’s newest 200 builds for each app across supported platforms."),
+                ("Build history", "ReviewBar follows Apple’s complete paginated Build response for each app so active cross-platform and TestFlight builds are not hidden."),
                 ("Notifications", "Real-time status updates require an optional public relay and an Account Holder, Admin, or App Manager role to create Apple webhooks.")
             ]
         )
@@ -186,6 +192,13 @@ struct SettingsView: View {
     private var cacheDescription: String {
         guard let cacheSize else { return "Calculating…" }
         return ByteCountFormatter.string(fromByteCount: cacheSize, countStyle: .file)
+    }
+
+    private var realtimeStatus: String {
+        if model.source == .demo { return "Unavailable" }
+        guard model.realtimeRelayIsConfigured else { return "Unavailable" }
+        let count = model.realtimeInstallation?.channels.count ?? 0
+        return count == 0 ? "Off" : "\(count) \(count == 1 ? "App" : "Apps")"
     }
 
     private func updateCacheSize() async {
@@ -205,6 +218,35 @@ struct SettingsView: View {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
         return build.map { "\(version) (\($0))" } ?? version
+    }
+}
+
+private struct PrivacyPolicyView: View {
+    var body: some View {
+        List {
+            Section("Core App") {
+                Text("ReviewBar has no account. Your App Store Connect private key and identifiers stay in this device's Keychain. The app sends authenticated dashboard and Analytics requests directly to Apple and stores decoded cache data on this device.")
+            }
+            Section("Optional Real-Time Updates") {
+                Text("If you opt in, ReviewBar's Cloudflare relay processes an APNs device token, opaque installation identifier, selected app ID and name, notification preferences, Apple webhook ID, and normalized status-event metadata. This information is used only to deliver notifications, deduplicate events, and preserve authoritative transition times. It is not used for tracking, advertising, or analytics.")
+            }
+            Section("Protection and Sharing") {
+                Text("Relay authentication tokens are hashed; APNs tokens and Apple webhook secrets are encrypted at rest. Cloudflare provides the hosting, database, and queue infrastructure, and Apple provides App Store Connect webhooks and APNs delivery. ReviewBar does not sell this data or share it for advertising.")
+            }
+            Section("Retention and Deletion") {
+                Text("Normalized relay events are retained for no more than 30 days. Disabling an app removes its relay channel and events. Disabling the final app or removing the connection removes the installation registration. Local dashboard, Analytics, icon, review-read, and release-history data can be cleared in Settings and is erased when the connection is removed.")
+            }
+            Section("Your Choices") {
+                Text("Real-time updates are optional. You can revoke notification permission in iOS Settings, disable individual apps in ReviewBar, remove the connection, or revoke the App Store Connect key in Apple's Users and Access settings.")
+            }
+            Section("Policy and Contact") {
+                Text("Policy version 0.1.1 · Updated August 1, 2026")
+                Text("Before public App Store submission, the distributor must publish this policy at its support website, add that URL to App Store Connect, and provide an operational privacy contact.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("Privacy Policy")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

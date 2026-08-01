@@ -37,6 +37,7 @@ targets:
         UIFileSharingEnabled: false
         ITSAppUsesNonExemptEncryption: false
         UIApplicationSupportsIndirectInputEvents: true
+        ReviewBarRelayBaseURL: $(REVIEWBAR_RELAY_BASE_URL)
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.reviewbar.ReviewBar
@@ -48,6 +49,8 @@ targets:
         DEVELOPMENT_TEAM: Z38CPBG8G6
         DEVELOPMENT_ASSET_PATHS: '"ReviewBar/Preview Content"'
         GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: ReviewBar/Support/ReviewBar.entitlements
+        REVIEWBAR_RELAY_BASE_URL: ""
   ReviewBarTests:
     type: bundle.unit-test
     platform: iOS

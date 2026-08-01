@@ -1,7 +1,7 @@
 import Foundation
 
 struct AppDashboard: Identifiable, Codable, Hashable, Sendable {
-    let app: DeveloperApp
+    var app: DeveloperApp
     var releases: [AppRelease]
     var reviews: [CustomerReview]
     var builds: [BuildInfo]

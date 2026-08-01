@@ -56,3 +56,23 @@ struct BuildStatusLabel: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+extension BuildInfo.ProcessingState {
+    var symbol: String {
+        switch self {
+        case .processing: "hourglass"
+        case .valid: "checkmark.circle.fill"
+        case .failed, .invalid: "exclamationmark.triangle.fill"
+        default: "questionmark.circle"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .processing: .orange
+        case .valid: .green
+        case .failed, .invalid: .red
+        default: .secondary
+        }
+    }
+}

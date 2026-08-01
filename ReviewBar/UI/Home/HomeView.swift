@@ -20,7 +20,11 @@ struct HomeView: View {
                 AppsListView(
                     model: model,
                     selectedAppID: $selectedAppID,
-                    selectedTab: $selectedTab
+                    onOpenApp: { appID in
+                        selectedAppID = appID
+                        overviewPath = NavigationPath()
+                        selectedTab = .overview
+                    }
                 )
             }
             .tabItem { Label("Apps", systemImage: "square.grid.2x2") }
@@ -31,7 +35,14 @@ struct HomeView: View {
                     model: model,
                     dashboard: selectedDashboard,
                     selectedAppID: $selectedAppID,
-                    selectedTab: $selectedTab
+                    onOpenReviews: {
+                        reviewsPath = NavigationPath()
+                        selectedTab = .reviews
+                    },
+                    onOpenAnalytics: {
+                        analyticsPath = NavigationPath()
+                        selectedTab = .analytics
+                    }
                 )
                 .navigationDestination(for: OverviewRoute.self) { route in
                     switch route {

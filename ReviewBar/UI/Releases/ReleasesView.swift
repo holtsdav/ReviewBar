@@ -62,36 +62,36 @@ struct ReleasesView: View {
                         }
                     } else if dashboard.sectionIssues[.releases] == nil {
                         ContentUnavailableView(
-                            "No Releases",
+                            "No Releases for \(selectedPlatform?.label ?? "This App")",
                             systemImage: "shippingbox",
-                            description: Text("Apple returned no App Store versions for this app.")
+                            description: Text("Apple returned no App Store versions for the selected platform.")
                         )
                     }
 
                     if statistics.completedReleaseCount > 0 {
                         Section {
                             if let value = statistics.averageWaiting {
-                                LabeledContent("Average observed wait", value: DisplayFormatters.duration(value))
+                                LabeledContent("Average recorded wait", value: DisplayFormatters.duration(value))
                             }
                             if let value = statistics.averageInReview {
-                                LabeledContent("Average observed review", value: DisplayFormatters.duration(value))
+                                LabeledContent("Average recorded review", value: DisplayFormatters.duration(value))
                             }
                             if let value = statistics.fastestApproval {
-                                LabeledContent("Fastest observed approval", value: DisplayFormatters.duration(value))
+                                LabeledContent("Fastest recorded approval", value: DisplayFormatters.duration(value))
                             }
                             if let value = statistics.longestApproval {
-                                LabeledContent("Longest observed approval", value: DisplayFormatters.duration(value))
+                                LabeledContent("Longest recorded approval", value: DisplayFormatters.duration(value))
                             }
                         } header: {
                             HStack {
-                                Text("Observed Timing")
+                                Text("All-Platform Release Timing")
                                 Spacer()
                                 Button("About timing", systemImage: "info.circle") { showingTimingHelp = true }
                                     .labelStyle(.iconOnly)
                                     .frame(minWidth: 44, minHeight: 44)
                             }
                         } footer: {
-                            Text("Based on \(statistics.completedReleaseCount) locally observed \(statistics.completedReleaseCount == 1 ? "release" : "releases").")
+                            Text("Based on \(statistics.completedReleaseCount) completed \(statistics.completedReleaseCount == 1 ? "timeline" : "timelines"). Exact Apple timestamps are preferred; local observations remain lower-bound estimates.")
                         }
                     }
 
@@ -104,6 +104,11 @@ struct ReleasesView: View {
                     }
                 }
                 .refreshable { await model.refresh() }
+                .onChange(of: dashboard.availablePlatforms, initial: true) { _, platforms in
+                    if selectedPlatform == nil || !platforms.contains(selectedPlatform ?? .unknown) {
+                        selectedPlatform = dashboard.preferredPlatform
+                    }
+                }
                 .task(id: releaseTaskID(for: dashboard)) {
                     if let releaseID = currentRelease?.id {
                         observations = await model.observations(for: releaseID)
@@ -121,6 +126,9 @@ struct ReleasesView: View {
                 List {
                     Section("Apple Timestamp") {
                         Text("Apple provides the review submission date. ReviewBar labels this timestamp directly.")
+                    }
+                    Section("Apple Webhook Timestamp") {
+                        Text("When real-time updates are enabled, supported Apple webhook events can provide the exact state-transition time. ReviewBar labels those events as authoritative Apple webhook timestamps.")
                     }
                     Section("Observed by ReviewBar") {
                         Text("Apple’s read API does not provide a timestamp for every state transition. ReviewBar records when this device first sees a new state, so the actual transition may have happened earlier.")
@@ -182,6 +190,7 @@ private struct ReleaseProgressView: View {
                         }
                     }
                     .accessibilityElement(children: .combine)
+                    .accessibilityLabel(phases[index])
                     .accessibilityValue(accessibilityValue(for: index, currentPhase: currentPhase))
                 }
             } else {
@@ -227,7 +236,15 @@ private struct ReleaseProgressView: View {
 
     private var currentDetail: String? {
         if let observation = observations.last(where: { $0.state == release.state }) {
-            return "Observed in this state for at least \(DisplayFormatters.duration(Date.now.timeIntervalSince(observation.observedAt)))."
+            let duration = DisplayFormatters.duration(Date.now.timeIntervalSince(observation.observedAt))
+            switch observation.source {
+            case .appleWebhook:
+                return "Apple webhook transition: \(duration) ago."
+            case .apple:
+                return "Apple API timestamp: \(DisplayFormatters.dateTime(observation.observedAt))."
+            case .localObservation:
+                return "Observed in this state for at least \(duration)."
+            }
         }
         if let submittedDate = release.submittedDate {
             return "Apple submission timestamp: \(DisplayFormatters.dateTime(submittedDate))."
@@ -265,7 +282,7 @@ private struct ReleaseTimelineView: View {
             }
             ForEach(observations) { observation in
                 TimelineEvent(
-                    title: "First observed \(observation.state.title)",
+                    title: timelineTitle(for: observation),
                     detail: DisplayFormatters.dateTime(observation.observedAt),
                     source: observation.source.label,
                     symbol: observation.state.symbol,
@@ -277,6 +294,14 @@ private struct ReleaseTimelineView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private func timelineTitle(for observation: ReleaseObservation) -> String {
+        switch observation.source {
+        case .appleWebhook: "Changed to \(observation.state.title)"
+        case .apple: "Apple recorded \(observation.state.title)"
+        case .localObservation: "First observed \(observation.state.title)"
         }
     }
 }

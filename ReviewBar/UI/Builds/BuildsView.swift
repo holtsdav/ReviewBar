@@ -31,15 +31,16 @@ struct BuildsView: View {
                         }
                     }
                     if visibleBuilds.isEmpty, dashboard.sectionIssues[.builds] == nil || !dashboard.builds.isEmpty {
+                        let platformBuilds = dashboard.builds.filter { selectedPlatform == nil || $0.platform == selectedPlatform }
                         ContentUnavailableView {
-                            Label(dashboard.builds.isEmpty ? "No Builds" : "No Matching Builds", systemImage: "hammer")
+                            Label(platformBuilds.isEmpty ? "No Builds for \(selectedPlatform?.label ?? "This App")" : "No Matching Builds", systemImage: "hammer")
                         } description: {
-                            Text(dashboard.builds.isEmpty
-                                 ? "Apple returned no builds for this app."
+                            Text(platformBuilds.isEmpty
+                                 ? "Apple returned no builds for the selected platform."
                                  : "Choose a different build filter.")
                         } actions: {
-                            if !dashboard.builds.isEmpty {
-                                Button("Show All") { filter = .all }
+                            if !platformBuilds.isEmpty, filter != .all {
+                                Button("Clear Filter") { filter = .all }
                             }
                         }
                     } else {
@@ -51,13 +52,18 @@ struct BuildsView: View {
                             }
                         }
                         Section {
-                            Text("ReviewBar shows Apple’s newest 200 builds for this app.")
+                            Text("ReviewBar follows Apple’s complete paginated build history for this app.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
                     }
                 }
                 .refreshable { await model.refresh() }
+                .onChange(of: dashboard.availablePlatforms, initial: true) { _, platforms in
+                    if selectedPlatform == nil || !platforms.contains(selectedPlatform ?? .unknown) {
+                        selectedPlatform = dashboard.preferredPlatform
+                    }
+                }
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         Menu("Sort and Filter", systemImage: "line.3.horizontal.decrease") {
@@ -114,7 +120,7 @@ struct BuildsView: View {
     }
 }
 
-private enum BuildFilter: CaseIterable {
+private enum BuildFilter: CaseIterable, Equatable {
     case all, processing, ready, failed, expired, expiringSoon
 
     var title: String {

@@ -22,7 +22,13 @@ struct AppIconAsset: Codable, Hashable, Sendable {
             .replacingOccurrences(of: "{w}", with: String(boundedWidth))
             .replacingOccurrences(of: "{h}", with: String(boundedHeight))
             .replacingOccurrences(of: "{f}", with: format)
-        guard !resolved.contains("{w}"), !resolved.contains("{h}"), !resolved.contains("{f}"),
+            .replacingOccurrences(of: "%7Bw%7D", with: String(boundedWidth), options: .caseInsensitive)
+            .replacingOccurrences(of: "%7Bh%7D", with: String(boundedHeight), options: .caseInsensitive)
+            .replacingOccurrences(of: "%7Bf%7D", with: format, options: .caseInsensitive)
+        guard !resolved.localizedCaseInsensitiveContains("%7Bw%7D"),
+              !resolved.localizedCaseInsensitiveContains("%7Bh%7D"),
+              !resolved.localizedCaseInsensitiveContains("%7Bf%7D"),
+              !resolved.contains("{w}"), !resolved.contains("{h}"), !resolved.contains("{f}"),
               let url = URL(string: resolved),
               url.scheme?.lowercased() == "https",
               url.user == nil,

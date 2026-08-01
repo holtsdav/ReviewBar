@@ -65,9 +65,17 @@ struct NetworkingTests {
 
     @Test("A partial endpoint failure preserves that section from cache")
     func partialFailurePreservesCache() async throws {
-        let saved = DemoFixtures.dashboards[0]
+        var saved = DemoFixtures.dashboards[0]
+        saved.app.iconAsset = AppIconAsset(
+            templateURL: try #require(URL(string: "https://cdn.example.com/cached/{w}x{h}.{f}")),
+            width: 512,
+            height: 512,
+            source: .build
+        )
+        var refreshedApp = saved.app
+        refreshedApp.iconAsset = nil
         let failedDashboard = AppDashboard(
-            app: saved.app,
+            app: refreshedApp,
             releases: [],
             reviews: [],
             builds: [],
@@ -94,6 +102,7 @@ struct NetworkingTests {
         #expect(refreshed.releases == saved.releases)
         #expect(refreshed.reviews == saved.reviews)
         #expect(refreshed.builds == saved.builds)
+        #expect(refreshed.app.iconAsset == saved.app.iconAsset)
         #expect(refreshed.sectionIssues.count == 3)
         #expect(refreshed.sectionIssues.values.allSatisfy { $0.usingCachedData == true })
         #expect(refreshed.sectionIssues.values.allSatisfy { $0.cachedAt == saved.fetchedAt })
@@ -135,7 +144,58 @@ struct NetworkingTests {
         #expect(PagingURLProtocol.requestCount == 2)
         let firstURL = try #require(PagingURLProtocol.requestedURLs.first)
         let queryItems = URLComponents(url: firstURL, resolvingAgainstBaseURL: false)?.queryItems
-        #expect(queryItems?.contains(URLQueryItem(name: "filter[appStoreVersions.platform]", value: "IOS")) == true)
+        #expect(queryItems?.contains(where: { $0.name.contains("platform") }) == false)
+        #expect(queryItems?.contains(URLQueryItem(name: "include", value: "appStoreIcon")) == true)
+        #expect(apps.first?.iconAsset?.source == .appStore)
+    }
+
+    @Test("Provider retains mixed-platform releases and builds without platform filters")
+    func mixedPlatformDashboard() async throws {
+        let provider = try makeHTTPProvider(mode: .multiPlatformDashboard)
+        let storeIcon = AppIconAsset(
+            templateURL: try #require(URL(string: "https://cdn.example.com/store/{w}x{h}.{f}")),
+            width: 1024,
+            height: 1024,
+            source: .appStore
+        )
+        let app = DeveloperApp(
+            id: "app",
+            name: "Universal",
+            bundleID: "com.example.universal",
+            sku: nil,
+            primaryLocale: nil,
+            iconAsset: storeIcon
+        )
+        let dashboard = try await provider.fetchDashboard(for: app)
+        #expect(Set(dashboard.releases.map(\.platform)) == [.iOS, .macOS, .tvOS, .visionOS])
+        #expect(Set(dashboard.builds.map(\.platform)) == [.iOS, .macOS])
+        #expect(dashboard.app.iconAsset == storeIcon)
+        let allQueryNames = PagingURLProtocol.requestedURLs.compactMap {
+            URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.map(\.name)
+        }.flatMap { $0 }
+        #expect(allQueryNames.contains(where: { $0 == "filter[platform]" || $0 == "filter[preReleaseVersion.platform]" }) == false)
+    }
+
+    @Test("Build pagination retains platforms that appear after the first 200 results")
+    func mixedPlatformBuildPagination() async throws {
+        let provider = try makeHTTPProvider(mode: .multiPlatformBuildPages)
+        let app = DeveloperApp(
+            id: "app",
+            name: "Universal",
+            bundleID: "com.example.universal",
+            sku: nil,
+            primaryLocale: nil,
+            iconAsset: nil
+        )
+        let dashboard = try await provider.fetchDashboard(for: app)
+        #expect(Set(dashboard.builds.map(\.platform)) == [.iOS, .macOS])
+        let buildRequests = PagingURLProtocol.requestedURLs.filter { $0.path.hasSuffix("/builds") }
+        #expect(buildRequests.count == 2)
+        #expect(buildRequests.contains { url in
+            URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.contains(
+                URLQueryItem(name: "cursor", value: "build-next")
+            ) == true
+        })
     }
 
     @Test("Repeating Apple pagination link is rejected")
@@ -234,6 +294,8 @@ private final class PagingURLProtocol: URLProtocol, @unchecked Sendable {
         case repeating
         case malformed
         case authenticationRetry
+        case multiPlatformDashboard
+        case multiPlatformBuildPages
     }
 
     private static let lock = NSLock()
@@ -273,7 +335,10 @@ private final class PagingURLProtocol: URLProtocol, @unchecked Sendable {
 
         let status: Int
         let data: Data
-        if mode == .authenticationRetry, attempt == 1 {
+        if mode == .multiPlatformDashboard || mode == .multiPlatformBuildPages {
+            status = 200
+            data = Self.multiPlatformResponse(for: url, paginateBuilds: mode == .multiPlatformBuildPages)
+        } else if mode == .authenticationRetry, attempt == 1 {
             status = 401
             data = Data(#"{"errors":[{"code":"NOT_AUTHORIZED"}]}"#.utf8)
         } else if mode == .malformed {
@@ -293,6 +358,9 @@ private final class PagingURLProtocol: URLProtocol, @unchecked Sendable {
                         "bundleId": "com.example.\(id)",
                         "sku": id.uppercased(),
                         "primaryLocale": "en-US"
+                    ],
+                    "relationships": [
+                        "appStoreIcon": ["data": ["type": "buildIcons", "id": "shared-icon"]]
                     ]
                 ]
             }
@@ -306,6 +374,20 @@ private final class PagingURLProtocol: URLProtocol, @unchecked Sendable {
             }
             data = (try? JSONSerialization.data(withJSONObject: [
                 "data": resources,
+                "included": [[
+                    "type": "buildIcons",
+                    "id": "shared-icon",
+                    "attributes": [
+                        "iconAsset": [
+                            "templateUrl": "https://cdn.example.com/{w}x{h}.{f}",
+                            "width": 1024,
+                            "height": 1024
+                        ],
+                        "iconType": "APP_STORE",
+                        "masked": false,
+                        "name": "Store"
+                    ]
+                ]],
                 "links": ["self": url.absoluteString, "next": next]
             ])) ?? Data()
         }
@@ -322,4 +404,24 @@ private final class PagingURLProtocol: URLProtocol, @unchecked Sendable {
     }
 
     override func stopLoading() {}
+
+    private static func multiPlatformResponse(for url: URL, paginateBuilds: Bool = false) -> Data {
+        let json: String
+        if url.path.hasSuffix("/appStoreVersions") {
+            json = #"{"data":[{"type":"appStoreVersions","id":"ios","attributes":{"platform":"IOS","versionString":"2.0","appVersionState":"IN_REVIEW","releaseType":"MANUAL","createdDate":"2026-07-31T10:00:00Z"}},{"type":"appStoreVersions","id":"mac","attributes":{"platform":"MAC_OS","versionString":"1.0","appVersionState":"READY_FOR_DISTRIBUTION","releaseType":"MANUAL","createdDate":"2026-07-30T10:00:00Z"}},{"type":"appStoreVersions","id":"tv","attributes":{"platform":"TV_OS","versionString":"1.0","appVersionState":"READY_FOR_DISTRIBUTION","releaseType":"MANUAL","createdDate":"2026-07-29T10:00:00Z"}},{"type":"appStoreVersions","id":"vision","attributes":{"platform":"VISION_OS","versionString":"1.0","appVersionState":"READY_FOR_DISTRIBUTION","releaseType":"MANUAL","createdDate":"2026-07-28T10:00:00Z"}}],"links":{}}"#
+        } else if url.path.hasSuffix("/builds") {
+            let hasCursor = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+                .contains(URLQueryItem(name: "cursor", value: "build-next")) == true
+            if paginateBuilds && !hasCursor {
+                json = #"{"data":[{"type":"builds","id":"b-ios","attributes":{"version":"5","uploadedDate":"2026-07-31T12:00:00Z","expired":false,"processingState":"VALID"},"relationships":{"preReleaseVersion":{"data":{"type":"preReleaseVersions","id":"p-ios"}},"icons":{"data":[]}}}],"included":[{"type":"preReleaseVersions","id":"p-ios","attributes":{"version":"2.0","platform":"IOS"}}],"links":{"next":"https://api.appstoreconnect.apple.com/v1/builds?cursor=build-next"}}"#
+            } else if paginateBuilds {
+                json = #"{"data":[{"type":"builds","id":"b-mac","attributes":{"version":"4","uploadedDate":"2026-07-30T12:00:00Z","expired":false,"processingState":"VALID"},"relationships":{"preReleaseVersion":{"data":{"type":"preReleaseVersions","id":"p-mac"}},"icons":{"data":[{"type":"buildIcons","id":"binary-icon"}]}}}],"included":[{"type":"preReleaseVersions","id":"p-mac","attributes":{"version":"1.0","platform":"MAC_OS"}},{"type":"buildIcons","id":"binary-icon","attributes":{"iconAsset":{"templateUrl":"https://cdn.example.com/build/{w}x{h}.{f}","width":512,"height":512},"iconType":"APP_STORE"}}],"links":{}}"#
+            } else {
+                json = #"{"data":[{"type":"builds","id":"b-mac","attributes":{"version":"4","uploadedDate":"2026-07-31T12:00:00Z","expired":false,"processingState":"VALID"},"relationships":{"preReleaseVersion":{"data":{"type":"preReleaseVersions","id":"p-mac"}},"icons":{"data":[{"type":"buildIcons","id":"binary-icon"}]} }},{"type":"builds","id":"b-ios","attributes":{"version":"5","uploadedDate":"2026-07-30T12:00:00Z","expired":false,"processingState":"PROCESSING"},"relationships":{"preReleaseVersion":{"data":{"type":"preReleaseVersions","id":"p-ios"}},"icons":{"data":[]}}}],"included":[{"type":"preReleaseVersions","id":"p-mac","attributes":{"version":"1.0","platform":"MAC_OS"}},{"type":"preReleaseVersions","id":"p-ios","attributes":{"version":"2.0","platform":"IOS"}},{"type":"buildIcons","id":"binary-icon","attributes":{"iconAsset":{"templateUrl":"https://cdn.example.com/build/{w}x{h}.{f}","width":512,"height":512},"iconType":"APP_STORE"}}],"links":{}}"#
+            }
+        } else {
+            json = #"{"data":[],"links":{}}"#
+        }
+        return Data(json.utf8)
+    }
 }

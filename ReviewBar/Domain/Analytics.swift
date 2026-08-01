@@ -10,6 +10,16 @@ struct AnalyticsDay: Codable, Hashable, Comparable, Sendable {
         guard pieces.count == 3,
               let year = Int(pieces[0]), let month = Int(pieces[1]), let day = Int(pieces[2]),
               (1...12).contains(month), (1...31).contains(day) else { return nil }
+        let components = DateComponents(
+            timeZone: TimeZone(secondsFromGMT: 0),
+            year: year,
+            month: month,
+            day: day,
+            hour: 12
+        )
+        guard let date = Self.utcCalendar.date(from: components) else { return nil }
+        let validated = Self.utcCalendar.dateComponents([.year, .month, .day], from: date)
+        guard validated.year == year, validated.month == month, validated.day == day else { return nil }
         self.year = year
         self.month = month
         self.day = day
@@ -76,7 +86,7 @@ enum AnalyticsMetricID: String, Codable, CaseIterable, Hashable, Sendable {
         case .firstTimeDownloads: "First-Time Downloads"
         case .redownloads: "Redownloads"
         case .inAppPurchases: "In-App Purchases"
-        case .proceedsUSD: "Proceeds"
+        case .proceedsUSD: "IAP Proceeds"
         case .installations: "Installations"
         case .sessions: "Sessions"
         case .crashes: "Crashes"
@@ -127,12 +137,13 @@ struct AnalyticsMetricSeries: Codable, Hashable, Sendable {
     var points: [AnalyticsMetricPoint]
     var availability: AnalyticsSeriesAvailability
     let sourceReport: String
+    var privacyThresholded: Bool? = nil
 }
 
 struct AnalyticsDataset: Codable, Hashable, Sendable {
     let appID: String
-    let requestID: String
-    let accessType: String
+    var requestID: String
+    var accessType: String
     var series: [AnalyticsMetricSeries]
     var fetchedAt: Date
     var warnings: [String]
@@ -150,25 +161,29 @@ struct AnalyticsDataset: Codable, Hashable, Sendable {
                     byDay[point.day] = point
                 }
                 series[index].points = byDay.values.sorted { $0.day < $1.day }
-                series[index].availability = newSeries.availability
+                // A recent empty instance must not hide valid older points
+                // retained for long ranges. Availability describes the merged
+                // series, not only the newest import.
+                series[index].availability = byDay.isEmpty ? newSeries.availability : .available
+                series[index].privacyThresholded = (series[index].privacyThresholded == true)
+                    || (newSeries.privacyThresholded == true)
             } else {
                 series.append(newSeries)
             }
         }
+        requestID = incoming.requestID
+        accessType = incoming.accessType
         fetchedAt = incoming.fetchedAt
         warnings = incoming.warnings
     }
 
     func summary(range: AnalyticsRange) -> AnalyticsSummary {
-        let end = dataThrough
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
-        let startDate = end.flatMap {
-            calendar.date(byAdding: .day, value: -(range.rawValue - 1), to: $0.date)
-        }
-        let start = startDate.map(AnalyticsDay.init(date:))
         var values: [AnalyticsMetricID: AnalyticsMetricValue] = [:]
         var chart: [AnalyticsMetricID: [AnalyticsMetricPoint]] = [:]
+        var dataThroughByMetric: [AnalyticsMetricID: AnalyticsDay] = [:]
+        var daysReportedByMetric: [AnalyticsMetricID: Int] = [:]
         for metric in AnalyticsMetricID.allCases {
             guard let metricSeries = series.first(where: { $0.metric == metric }) else {
                 values[metric] = .notAvailable
@@ -178,12 +193,23 @@ struct AnalyticsDataset: Codable, Hashable, Sendable {
                 values[metric] = metricSeries.availability == .insufficientData ? .insufficientData : .noData
                 continue
             }
+            let end = metricSeries.points.map(\.day).max()
+            let startDate = end.flatMap {
+                calendar.date(byAdding: .day, value: -(range.rawValue - 1), to: $0.date)
+            }
+            let start = startDate.map(AnalyticsDay.init(date:))
             let selected = metricSeries.points.filter { point in
                 guard let start, let end else { return false }
                 return point.day >= start && point.day <= end
             }
             chart[metric] = selected
-            values[metric] = selected.isEmpty ? .noData : .value(selected.reduce(0) { $0 + $1.value })
+            if let end { dataThroughByMetric[metric] = end }
+            daysReportedByMetric[metric] = selected.count
+            if selected.isEmpty {
+                values[metric] = metricSeries.privacyThresholded == true ? .insufficientData : .noData
+            } else {
+                values[metric] = .value(selected.reduce(0) { $0 + $1.value })
+            }
         }
         let selectedDays = chart.values.flatMap { $0.map(\.day) }
         return AnalyticsSummary(
@@ -192,6 +218,8 @@ struct AnalyticsDataset: Codable, Hashable, Sendable {
             chartPoints: chart,
             coverageStart: selectedDays.min(),
             coverageEnd: selectedDays.max(),
+            dataThroughByMetric: dataThroughByMetric,
+            daysReportedByMetric: daysReportedByMetric,
             fetchedAt: fetchedAt,
             warnings: warnings
         )
@@ -216,6 +244,8 @@ struct AnalyticsSummary: Sendable {
     let chartPoints: [AnalyticsMetricID: [AnalyticsMetricPoint]]
     let coverageStart: AnalyticsDay?
     let coverageEnd: AnalyticsDay?
+    let dataThroughByMetric: [AnalyticsMetricID: AnalyticsDay]
+    let daysReportedByMetric: [AnalyticsMetricID: Int]
     let fetchedAt: Date
     let warnings: [String]
 
@@ -236,15 +266,17 @@ enum AnalyticsLoadState: Equatable, Sendable {
     case idle
     case loading(cached: AnalyticsDataset?)
     case available(AnalyticsDataset)
-    case notEnabled
-    case generating
-    case stoppedDueToInactivity
-    case permissionRequired(String)
+    case notEnabled(cached: AnalyticsDataset?)
+    case generating(cached: AnalyticsDataset?)
+    case stoppedDueToInactivity(cached: AnalyticsDataset?)
+    case permissionRequired(String, cached: AnalyticsDataset?)
     case failed(message: String, cached: AnalyticsDataset?)
 
     var cachedDataset: AnalyticsDataset? {
         switch self {
-        case .loading(let cached), .failed(_, let cached): cached
+        case .loading(let cached), .notEnabled(let cached), .generating(let cached),
+             .stoppedDueToInactivity(let cached), .permissionRequired(_, let cached),
+             .failed(_, let cached): cached
         case .available(let dataset): dataset
         default: nil
         }

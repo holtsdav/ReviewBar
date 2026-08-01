@@ -17,6 +17,16 @@ struct AppError: Error, Equatable, Sendable {
 
     let kind: Kind
     let message: String
+    /// True only when Apple returned an authoritative non-success HTTP status,
+    /// proving a mutating request was rejected rather than leaving its outcome
+    /// ambiguous through transport loss or response-decoding failure.
+    let requestWasRejected: Bool
+
+    init(kind: Kind, message: String, requestWasRejected: Bool = false) {
+        self.kind = kind
+        self.message = message
+        self.requestWasRejected = requestWasRejected
+    }
 
     var title: String {
         switch kind {

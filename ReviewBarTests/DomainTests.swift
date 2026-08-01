@@ -60,21 +60,57 @@ struct DomainTests {
         #expect(build.selectedForAppStoreVersion == "1.4")
     }
 
-    @Test("Only iOS builds are kept for the iPhone dashboard")
-    func iOSBuildFiltering() {
-        let ios = DemoFixtures.dashboards[0].builds[0]
-        let mac = BuildInfo(
-            id: "mac-build",
-            buildNumber: "9",
-            version: "2.0",
-            platform: .macOS,
-            uploadedDate: .now,
-            expirationDate: nil,
-            expired: false,
-            processingState: .valid,
-            minimumOSVersion: "15.0"
+    @Test("macOS-only apps remain visible")
+    func macOSOnlyApp() throws {
+        let dashboard = try #require(DemoFixtures.dashboards.first { $0.app.name == "Trail Notes" })
+        #expect(dashboard.availablePlatforms == [.macOS])
+        #expect(dashboard.currentRelease(in: .macOS)?.platform == .macOS)
+        #expect(dashboard.latestBuild(in: .macOS)?.platform == .macOS)
+    }
+
+    @Test("iOS-only apps remain visible")
+    func iOSOnlyApp() throws {
+        let dashboard = try #require(DemoFixtures.dashboards.first { $0.app.name == "Quiet Budget" })
+        #expect(dashboard.availablePlatforms == [.visionOS])
+        let livingRoom = try #require(DemoFixtures.dashboards.first { $0.app.name == "Living Room Scores" })
+        #expect(livingRoom.availablePlatforms == [.tvOS])
+        let iOS = AppDashboard(
+            app: dashboard.app,
+            releases: [AppRelease(
+                id: "ios-only",
+                version: "1.0",
+                platform: .iOS,
+                state: .readyForDistribution,
+                createdDate: .now,
+                submittedDate: nil,
+                earliestReleaseDate: nil,
+                releaseType: nil
+            )],
+            reviews: [],
+            builds: [],
+            fetchedAt: .now
         )
-        #expect(AppStoreConnectDataProvider.iOSBuilds([mac, ios]).map(\.id) == [ios.id])
+        #expect(iOS.availablePlatforms == [.iOS])
+    }
+
+    @Test("Multi-platform apps retain independent current releases and builds")
+    func multiPlatformApp() throws {
+        let dashboard = try #require(DemoFixtures.dashboards.first { $0.app.name == "Glassdays" })
+        #expect(dashboard.availablePlatforms == [.iOS, .macOS])
+        #expect(dashboard.currentRelease(in: .iOS)?.version == "1.4")
+        #expect(dashboard.currentRelease(in: .macOS)?.version == "2.0")
+        #expect(dashboard.latestBuild(in: .iOS)?.platform == .iOS)
+        #expect(dashboard.latestBuild(in: .macOS)?.platform == .macOS)
+    }
+
+    @Test("All current App Store Connect platform values map intentionally", arguments: [
+        ("IOS", AppRelease.Platform.iOS),
+        ("MAC_OS", .macOS),
+        ("TV_OS", .tvOS),
+        ("VISION_OS", .visionOS)
+    ])
+    func platformMapping(apiValue: String, platform: AppRelease.Platform) {
+        #expect(AppRelease.Platform(apiValue: apiValue) == platform)
     }
 
     @Test("Accepted remains the current unreleased version")

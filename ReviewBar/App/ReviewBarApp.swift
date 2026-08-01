@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct ReviewBarApp: App {
+    @UIApplicationDelegateAdaptor(ReviewBarAppDelegate.self) private var appDelegate
     @State private var model = AppModel.live()
 
     var body: some Scene {

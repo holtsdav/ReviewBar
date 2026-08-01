@@ -3,7 +3,7 @@ import SwiftUI
 struct AppsListView: View {
     let model: AppModel
     @Binding var selectedAppID: String?
-    @Binding var selectedTab: DashboardTab
+    let onOpenApp: (String) -> Void
     @State private var query = ""
     @State private var sort = AppSort.name
     @State private var filter = AppActivityFilter.all
@@ -49,8 +49,7 @@ struct AppsListView: View {
                     } else {
                         ForEach(filteredDashboards) { dashboard in
                             Button {
-                                selectedAppID = dashboard.id
-                                selectedTab = .overview
+                                onOpenApp(dashboard.id)
                             } label: {
                                 AppRowView(
                                     dashboard: dashboard,
@@ -103,8 +102,8 @@ struct AppsListView: View {
             let matchesFilter: Bool
             switch filter {
             case .all: matchesFilter = true
-            case .inReview: matchesFilter = dashboard.currentRelease?.state == .inReview
-            case .processing: matchesFilter = dashboard.latestBuild?.processingState == .processing
+            case .inReview: matchesFilter = dashboard.releases.contains { $0.state == .inReview }
+            case .processing: matchesFilter = dashboard.builds.contains { $0.processingState == .processing }
             case .newReviews: matchesFilter = dashboard.reviews.contains { model.unreadReviewIDs.contains($0.id) }
             }
             return matchesSearch && matchesFilter
@@ -124,7 +123,9 @@ struct AppsListView: View {
     }
 
     private func activityDate(_ dashboard: AppDashboard) -> Date {
-        [dashboard.newestReview?.createdDate, dashboard.latestBuild?.uploadedDate, dashboard.currentRelease?.submittedDate]
+        ([dashboard.newestReview?.createdDate]
+            + dashboard.builds.map(\.uploadedDate)
+            + dashboard.releases.map(\.submittedDate))
             .compactMap { $0 }
             .max() ?? .distantPast
     }
