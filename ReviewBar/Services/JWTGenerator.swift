@@ -9,7 +9,6 @@ actor JWTGenerator {
 
     private struct CachedToken: Sendable {
         let token: Token
-        let scope: String
     }
 
     private let keyID: String
@@ -43,8 +42,12 @@ actor JWTGenerator {
         guard ["GET", "POST", "PATCH", "DELETE"].contains(normalizedMethod), path.hasPrefix("/v1/") else {
             throw AppError(kind: .invalidCredentials, message: "ReviewBar could not scope an App Store Connect token safely.")
         }
-        let scope = "\(normalizedMethod) \(path)"
-        if let cached = cache[scope], cached.token.expiresAt.timeIntervalSince(now) > 60 {
+        // Apple documents the optional JWT `scope` claim for GET requests.
+        // Mutation requests must use an otherwise identical token without a
+        // scope claim; including `POST`, `PATCH`, or `DELETE` in `scope` is
+        // rejected by App Store Connect even when the key role is valid.
+        let cacheKey = cacheKey(method: normalizedMethod, path: path)
+        if let cached = cache[cacheKey], cached.token.expiresAt.timeIntervalSince(now) > 60 {
             return cached.token
         }
 
@@ -54,8 +57,10 @@ actor JWTGenerator {
             "iat": issuedAt,
             "exp": Int(expiresAt.timeIntervalSince1970),
             "aud": "appstoreconnect-v1",
-            "scope": [scope]
         ]
+        if normalizedMethod == "GET" {
+            payload["scope"] = ["GET \(path)"]
+        }
         switch scopeType {
         case .team:
             guard let issuerID, !issuerID.isEmpty else {
@@ -83,15 +88,19 @@ actor JWTGenerator {
         }
         let value = signingInput + "." + Base64URL.encode(signature.rawRepresentation)
         let token = Token(value: value, expiresAt: expiresAt)
-        cache[scope] = CachedToken(token: token, scope: scope)
+        cache[cacheKey] = CachedToken(token: token)
         return token
     }
 
     func invalidate(method: String = "GET", path: String? = nil) {
         if let path {
-            cache["\(method.uppercased()) \(path)"] = nil
+            cache[cacheKey(method: method, path: path)] = nil
         } else {
             cache.removeAll(keepingCapacity: false)
         }
+    }
+
+    private func cacheKey(method: String, path: String) -> String {
+        method.uppercased() == "GET" ? "GET \(path)" : "UNSCOPED"
     }
 }

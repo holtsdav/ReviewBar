@@ -109,7 +109,7 @@ See [`Documentation/AppStoreConnectAPI.md`](Documentation/AppStoreConnectAPI.md)
 ## Security summary
 
 - User App Store Connect private keys and identifiers remain in a non-synchronizing `WhenUnlockedThisDeviceOnly` Keychain item.
-- Short-lived ES256 JWTs exist only in memory and are scoped to the exact request method/path.
+- Short-lived ES256 JWTs exist only in memory; read-only GET tokens use Apple's request-path scope, while mutation tokens intentionally omit the GET-only scope claim.
 - Apple API sessions are ephemeral, reject unsafe hosts/redirects, and do not cache credentials or raw responses.
 - Dashboard, Analytics, release-history, and icon caches contain no authentication secret and use iOS file protection.
 - The optional relay stores only opaque installation/channel metadata, a hash of its installation bearer, encrypted APNs/webhook secrets, normalized recent events, and notification preferences.

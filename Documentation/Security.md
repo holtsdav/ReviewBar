@@ -23,7 +23,7 @@ The optional relay is not trusted with App Store Connect credentials. It never r
 - App Store Connect credentials use a precise non-synchronizing generic-password Keychain item with `WhenUnlockedThisDeviceOnly` accessibility.
 - The opaque relay installation bearer, active channel mapping, and any provisional cleanup identifiers use a separate this-device-only Keychain item; neither enters UserDefaults or dashboard caches. Provisional records include the deterministic callback URL, are written before Apple creation/confirmation, and remain until both Apple and relay cleanup succeed. An ambiguous create is reconciled by listing that app's Apple webhooks and matching the exact callback URL before disconnect can erase the credential.
 - ES256 JWTs live only in signer-actor memory, last ten minutes, and rotate with 60 seconds remaining.
-- Tokens are scoped to the exact method/path. Authorization is never placed in a URL.
+- Read-only GET tokens use Apple's exact request-path scope; mutation tokens intentionally omit the GET-only scope claim. Authorization is never placed in a URL.
 - Authenticated URLs and redirects must remain on Apple’s exact HTTPS host. Sessions disable cookies and URL caching.
 - Analytics segment and icon downloads use separate unauthenticated sessions, validate HTTPS/no user info, impose size limits, and validate decoded content before caching.
 - Dashboard, Analytics, icon, unread, and release-history files contain no authentication secrets and use atomic iOS file protection.

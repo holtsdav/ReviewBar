@@ -114,15 +114,23 @@ struct AnalyticsView: View {
             )
         case .failed(let message, let cached):
             if let cached {
-                Section { Label(message, systemImage: "exclamationmark.triangle") }
-                analyticsContent(cached, refreshing: false)
+                statusContent(
+                    title: "Analytics Update Failed",
+                    message: message,
+                    symbol: "exclamationmark.triangle",
+                    cached: cached,
+                    actionTitle: "Try Again"
+                ) { Task { await model.loadAnalytics(appID: appID, force: true) } }
             } else {
                 Section {
                     AnalyticsStatusMessage(
                         title: "Analytics Unavailable",
                         message: message,
-                        symbol: "exclamationmark.triangle"
-                    )
+                        symbol: "exclamationmark.triangle",
+                        actionTitle: "Try Again"
+                    ) {
+                        Task { await model.loadAnalytics(appID: appID, force: true) }
+                    }
                 }
             }
         }

@@ -48,6 +48,26 @@ struct JWTGeneratorTests {
         #expect(payload["scope"] as? [String] == ["GET /v1/builds"])
     }
 
+    @Test("Mutation tokens omit the GET-only scope claim")
+    func mutationTokenIsUnscoped() async throws {
+        let key = P256.Signing.PrivateKey()
+        let credential = AppStoreConnectCredential(
+            keyID: "TEAMKEY1",
+            issuerID: "00000000-0000-0000-0000-000000000000",
+            privateKeyPEM: key.pemRepresentation,
+            scope: .team
+        )
+        let token = try await JWTGenerator(credential: credential).token(
+            method: "POST",
+            path: "/v1/analyticsReportRequests",
+            now: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        let parts = token.value.split(separator: ".").map(String.init)
+        let payload = try decodedJSON(parts[1])
+        #expect(payload["iss"] as? String == credential.issuerID)
+        #expect(payload["scope"] == nil)
+    }
+
     @Test("Token lifetime over Apple's limit is rejected")
     func excessiveLifetime() {
         let key = P256.Signing.PrivateKey()

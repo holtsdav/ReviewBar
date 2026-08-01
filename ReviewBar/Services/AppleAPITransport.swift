@@ -144,7 +144,7 @@ enum AppleHTTPErrorMapper {
             // rather than exposing a raw JSON:API error string.
             return AppError(
                 kind: .other,
-                message: "Apple returned an undocumented METHOD_NOT_ALLOWED response for this operation. If this was Analytics setup, verify an Admin key; otherwise try again later. Your cached data is unchanged.",
+                message: "Apple returned an undocumented METHOD_NOT_ALLOWED response for this operation. For Analytics, App Analytics visible in App Store Connect is separate from the Analytics Reports API request; an Admin key is sufficient to create that request. Try again later. Your cached data is unchanged.",
                 requestWasRejected: true
             )
         case 429:

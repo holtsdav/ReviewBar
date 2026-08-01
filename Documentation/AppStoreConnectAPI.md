@@ -8,7 +8,7 @@ ReviewBar 0.1.1 was checked against Apple’s official App Store Connect API doc
 - [Generating tokens](https://developer.apple.com/documentation/appstoreconnectapi/generating-tokens-for-api-requests)
 - [Creating API keys](https://developer.apple.com/documentation/appstoreconnectapi/creating-api-keys-for-app-store-connect-api)
 
-Team JWTs use `iss`; individual JWTs use literal `sub: user` and omit `iss`. Both use ES256, `kid`, `iat`, `exp`, `aud: appstoreconnect-v1`, and an exact request scope. Apple caps most tokens at 20 minutes; ReviewBar uses ten minutes.
+Team JWTs use `iss`; individual JWTs use literal `sub: user` and omit `iss`. Both use ES256, `kid`, `iat`, `exp`, and `aud: appstoreconnect-v1`. ReviewBar scopes read-only GET tokens to the exact request path; Apple documents the `scope` claim for GET requests, so mutation tokens omit it. Apple caps most tokens at 20 minutes; ReviewBar uses ten minutes.
 
 ## Apps, platforms, and icons
 
