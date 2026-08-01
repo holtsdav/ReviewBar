@@ -154,7 +154,7 @@ struct SettingsView: View {
             sections: [
                 ("Release timing", "ReviewBar prefers exact Apple webhook timestamps, then Apple API dates, then clearly labeled locally observed changes. Not every Apple event includes a transition timestamp."),
                 ("Reviews", "Apple does not currently offer a customer App Store review-created webhook. Review notifications cannot be real-time; unread state remains device-local."),
-                ("Analytics", "Analytics Reports are delayed, may take 24–48 hours to appear initially, and retain daily report instances for a limited period. ReviewBar always shows the actual data-through date."),
+                ("Analytics", "Analytics Reports are delayed, may take 1–2 days to appear initially, and retain daily report instances for a limited period. ReviewBar always shows the actual data-through date."),
                 ("Build history", "ReviewBar follows Apple’s complete paginated Build response for each app so active cross-platform and TestFlight builds are not hidden."),
                 ("Notifications", "Real-time status updates require an optional public relay and an Account Holder, Admin, or App Manager role to create Apple webhooks.")
             ]

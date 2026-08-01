@@ -23,6 +23,7 @@ actor AnalyticsRepository {
     private let provider: any AnalyticsDataProviding
     private let cache: any AnalyticsCaching
     private var inFlight: [String: Task<AnalyticsFetchResult, Error>] = [:]
+    private var inFlightGenerations: [String: Int] = [:]
     private var generation = 0
     private var isResetting = false
 
@@ -55,13 +56,20 @@ actor AnalyticsRepository {
             return .dataset(incoming)
         }
         inFlight[appID] = task
+        inFlightGenerations[appID] = expectedGeneration
         do {
             let result = try await task.value
             guard generation == expectedGeneration else { throw CancellationError() }
-            inFlight[appID] = nil
+            if inFlightGenerations[appID] == expectedGeneration {
+                inFlight[appID] = nil
+                inFlightGenerations[appID] = nil
+            }
             return result
         } catch {
-            inFlight[appID] = nil
+            if inFlightGenerations[appID] == expectedGeneration {
+                inFlight[appID] = nil
+                inFlightGenerations[appID] = nil
+            }
             throw error
         }
     }
@@ -92,6 +100,7 @@ actor AnalyticsRepository {
         for task in tasks { task.cancel() }
         for task in tasks { _ = try? await task.value }
         inFlight = [:]
+        inFlightGenerations = [:]
     }
 
     func sizeInBytes() async -> Int64 {

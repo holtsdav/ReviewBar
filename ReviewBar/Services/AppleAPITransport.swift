@@ -135,6 +135,18 @@ enum AppleHTTPErrorMapper {
                 message: "Apple denied this request. Check that the key is active and its App Store Connect user can view this app and feature.",
                 requestWasRejected: true
             )
+        case 405:
+            // 405 is not listed as a normal response for the documented
+            // App Store Connect resources, but Apple has returned
+            // METHOD_NOT_ALLOWED for Analytics Report requests in production.
+            // Keep this distinct from an ordinary unknown 4xx so the UI can
+            // explain that this is an Apple endpoint/availability problem
+            // rather than exposing a raw JSON:API error string.
+            return AppError(
+                kind: .other,
+                message: "Apple returned an undocumented METHOD_NOT_ALLOWED response for this operation. If this was Analytics setup, verify an Admin key; otherwise try again later. Your cached data is unchanged.",
+                requestWasRejected: true
+            )
         case 429:
             let retryAfter = retryAfterHeader.flatMap(TimeInterval.init)
             return AppError(

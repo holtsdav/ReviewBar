@@ -686,6 +686,7 @@
 		3E0E16F2466CD1D2D4B907FE /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APS_ENVIRONMENT = development;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = ReviewBar/Support/ReviewBar.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
@@ -711,6 +712,7 @@
 		50F37C7D596A2F5270D45A9E /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = ReviewBar/Support/ReviewBar.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";

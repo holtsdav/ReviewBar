@@ -11,7 +11,7 @@ The project targets iOS 26, Swift 6 strict concurrency, SwiftUI, and version **0
 - **Overview:** a compact operational dashboard for current release, latest build, newest review, and cached seven-day Analytics. Release History and Builds are destinations from Overview rather than permanent tabs.
 - **Reviews:** read-only customer-review reading, filters, sorting, response state, pagination, and device-local unread state.
 - **Analytics:** official Analytics Reports discovery, initial ongoing-request creation, report/instance/segment pagination, gzip TSV import, schema validation, correction handling, aggregation, caching, data-through dates, and 7D/30D/90D/1Y ranges.
-- **Settings:** compact grouped account, data, optional notification, developer, privacy, and about controls.
+- **Settings:** compact grouped account, data, optional notification, privacy, and about controls.
 - **Real-time updates:** optional per-app release, build-upload, and external-TestFlight alerts through official App Store Connect webhooks and the small Cloudflare relay in `NotificationRelay/`.
 - **Resilience:** stale-while-refresh launch, section-level cached fallback, explicit permission/offline/rate-limit/malformed/error states, and deterministic test-fixture scenarios kept out of the signed-in product flow.
 - **Accessibility:** light/dark mode, Dynamic Type reflow, VoiceOver semantics, native hit targets, and portrait/landscape layouts.
@@ -20,7 +20,7 @@ ReviewBar has no customer-review mutation operations and never replies to, edits
 
 ## Navigation
 
-The global tab bar contains **Apps**, **Overview**, **Reviews**, and **Analytics**. Once an app is selected, its permanent product areas are Overview, Reviews, and Analytics. Overview opens focused Release History and Builds screens only when requested.
+The global tab bar contains **Apps**, **Reviews**, and **Analytics**. Selecting an app opens its operational Overview; focused Release History and Builds screens are destinations from Overview rather than permanent tabs.
 
 ```text
 Apps ── select app ──> Overview ──> Release History
@@ -67,7 +67,7 @@ Key directories:
 5. In ReviewBar choose the key type, enter the identifiers, import the `.p8`, and select **Test & Save**.
 6. ReviewBar verifies a minimal request before saving the credential with this-device-only Keychain protection.
 
-Analytics reading depends on the API key’s role and app access. Creating the first ongoing Analytics Report request requires an Admin-capable key. Creating App Store Connect webhooks requires Account Holder, Admin, or App Manager.
+Analytics reading depends on the API key’s role and app access. Creating the first ongoing Analytics Report request requires an Admin-capable key; Admin, Sales and Reports, or Finance keys can read existing reports. Creating App Store Connect webhooks requires Account Holder, Admin, or App Manager.
 
 ## Build and test
 
@@ -94,7 +94,8 @@ npm test
 
 ## API and data limitations
 
-- Analytics Reports are delayed, app/report dependent, can take 24–48 hours to appear initially, and are not real-time. The UI shows the actual data-through date for each metric and distinguishes zero, no data, unavailable, and insufficient data.
+- Analytics Reports are delayed, app/report dependent, can take 1–2 days to appear initially, and are not real-time. The UI shows the actual data-through date for each metric and distinguishes zero, no data, unavailable, and insufficient data.
+- Apple documents the Analytics Report request and download endpoints, but some production accounts have received an undocumented `METHOD_NOT_ALLOWED` response when creating a request. ReviewBar keeps the cache intact and explains the required role/availability check instead of retrying the mutation indefinitely.
 - Apple may add Analytics TSV columns; ReviewBar ignores unknown additions but rejects missing or malformed required date/value fields. It does not fabricate unsupported metrics.
 - Analytics imports are sequential and enforce a 16 MiB per-segment compressed/inflated safety bound to keep memory predictable on small iPhones; an oversized report is labeled unavailable while other report types remain usable.
 - Apple exposes no customer App Store review-created webhook. Review detection remains refresh-based.

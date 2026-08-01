@@ -21,6 +21,22 @@ struct NetworkingTests {
         #expect(mapped.kind == expectedKind)
     }
 
+    @Test("Apple 405 errors become an actionable, cache-safe message")
+    func methodNotAllowedMapping() {
+        let data = Data(#"{"errors":[{"code":"METHOD_NOT_ALLOWED"}]}"#.utf8)
+        let mapped = AppleHTTPErrorMapper.map(
+            statusCode: 405,
+            data: data,
+            retryAfterHeader: nil
+        )
+
+        #expect(mapped.kind == .other)
+        #expect(mapped.requestWasRejected)
+        #expect(mapped.message.contains("undocumented"))
+        #expect(mapped.message.contains("METHOD_NOT_ALLOWED"))
+        #expect(mapped.message.contains("cached data is unchanged"))
+    }
+
     @Test("Transport rejects hostile pagination hosts before creating a request")
     func hostilePaginationHost() async throws {
         let key = P256.Signing.PrivateKey()

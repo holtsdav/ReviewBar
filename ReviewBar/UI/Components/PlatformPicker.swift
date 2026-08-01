@@ -43,9 +43,10 @@ struct PlatformLabel: View {
     let platform: AppRelease.Platform
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
             Image(systemName: platform.symbol)
                 .imageScale(.small)
+                .frame(width: 15, alignment: .center)
             Text(platform.label)
         }
         .accessibilityElement(children: .combine)

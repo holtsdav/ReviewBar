@@ -34,3 +34,4 @@ Secrets.xcconfig
 
 # Local tooling
 .xcodegen/
+.xcodebuildmcp/

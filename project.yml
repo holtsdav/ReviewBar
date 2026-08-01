@@ -51,6 +51,11 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_ENTITLEMENTS: ReviewBar/Support/ReviewBar.entitlements
         REVIEWBAR_RELAY_BASE_URL: ""
+      configs:
+        Debug:
+          APS_ENVIRONMENT: development
+        Release:
+          APS_ENVIRONMENT: production
   ReviewBarTests:
     type: bundle.unit-test
     platform: iOS

@@ -8,12 +8,35 @@ protocol AppIconLoading: Sendable {
     func sizeInBytes() async -> Int64
 }
 
+/// Decodes downloaded icon bytes away from SwiftUI's main-actor view update.
+///
+/// `UIImage(data:)` is deceptively expensive for App Store icons: the image
+/// may be several megapixels even though it is rendered at a small point size.
+/// ImageIO can both decode and downsample in one pass on an actor's generic
+/// executor, leaving the main actor with only the inexpensive `UIImage` wrapper.
+actor AppIconImageDecoder {
+    static let shared = AppIconImageDecoder()
+
+    func decode(_ data: Data, maxPixelSize: Int) -> CGImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              CGImageSourceGetCount(source) > 0 else { return nil }
+
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(1, maxPixelSize)
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    }
+}
+
 actor AppIconCache: AppIconLoading {
     static let shared = AppIconCache()
 
     private let directoryURL: URL
     private let session: URLSession
     private var inFlight: [URL: Task<Data, Error>] = [:]
+    private var inFlightGenerations: [URL: Int] = [:]
     private var generation = 0
     private var isClearing = false
     private let maximumBytes = 12 * 1_024 * 1_024
@@ -72,16 +95,23 @@ actor AppIconCache: AppIconLoading {
             return data
         }
         inFlight[url] = task
+        inFlightGenerations[url] = expectedGeneration
         do {
             let data = try await task.value
             guard generation == expectedGeneration else { throw CancellationError() }
             try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
             try evictIfNeeded(for: data.count)
             try data.write(to: fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-            inFlight[url] = nil
+            if inFlightGenerations[url] == expectedGeneration {
+                inFlight[url] = nil
+                inFlightGenerations[url] = nil
+            }
             return data
         } catch {
-            inFlight[url] = nil
+            if inFlightGenerations[url] == expectedGeneration {
+                inFlight[url] = nil
+                inFlightGenerations[url] = nil
+            }
             throw error
         }
     }
@@ -95,6 +125,7 @@ actor AppIconCache: AppIconLoading {
         for task in tasks { task.cancel() }
         for task in tasks { _ = try? await task.value }
         inFlight = [:]
+        inFlightGenerations = [:]
         if FileManager.default.fileExists(atPath: directoryURL.path) {
             try FileManager.default.removeItem(at: directoryURL)
         }

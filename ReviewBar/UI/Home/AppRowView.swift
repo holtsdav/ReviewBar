@@ -71,7 +71,7 @@ struct AppRowView: View {
                     }
                     if unreadCount > 0 {
                         Label("\(unreadCount) new \(unreadCount == 1 ? "review" : "reviews")", systemImage: "circle.fill")
-                            .fontWeight(.semibold).foregroundStyle(.primary)
+                            .fontWeight(.semibold).foregroundStyle(.tint)
                     }
     }
 }

@@ -6,6 +6,9 @@ struct ReviewsView: View {
     @State private var selectedReviewAppID: String?
     @State private var filter = ReviewFilter()
     @State private var showingFilters = false
+    @State private var preparedEntries: [ReviewListEntry] = []
+    @State private var preparedKey: ReviewPreparationKey?
+    @State private var isPreparingReviews = false
 
     var body: some View {
         Group {
@@ -17,7 +20,8 @@ struct ReviewsView: View {
                 ChooseAppView()
             } else {
                 let reviews = scopedDashboards.flatMap(\.reviews)
-                let filtered = filteredEntries
+                let preparationKey = reviewPreparationKey
+                let filtered = preparedEntries
                 List {
                 Section {
                     AppSelectionPicker(
@@ -27,8 +31,6 @@ struct ReviewsView: View {
                     )
                     .accessibilityLabel("Reviews app")
                     .accessibilityValue(selectedReviewAppID.flatMap { id in model.dashboards.first(where: { $0.id == id })?.app.name } ?? "All Apps")
-                } header: {
-                    Text("App")
                 }
 
                 if model.showingCachedData {
@@ -45,7 +47,15 @@ struct ReviewsView: View {
                     }
                 }
 
-                if filtered.isEmpty {
+                if isPreparingReviews && preparedKey != preparationKey {
+                    Section {
+                        HStack {
+                            Spacer()
+                            ProgressView("Updating reviews…")
+                            Spacer()
+                        }
+                    }
+                } else if filtered.isEmpty {
                     ContentUnavailableView {
                         Label(reviews.isEmpty ? "No Reviews" : "No Matching Reviews", systemImage: "star.bubble")
                     } description: {
@@ -94,7 +104,7 @@ struct ReviewsView: View {
                 .refreshable { await model.refresh() }
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) {
-                        if !reviews.isEmpty {
+                        if !reviews.isEmpty && preparedKey == preparationKey {
                             Menu("Review actions", systemImage: "ellipsis.circle") {
                                 Picker("Sort", selection: $filter.sort) {
                                     ForEach(ReviewFilter.Sort.allCases, id: \.self) { sort in
@@ -128,12 +138,23 @@ struct ReviewsView: View {
                 self.selectedReviewAppID = nil
             }
         }
-    }
-
-    private struct ReviewEntry: Identifiable {
-        let review: CustomerReview
-        let appName: String
-        var id: String { review.id }
+        .task(id: ReviewPreparationTaskID(key: reviewPreparationKey, isActive: isActive)) {
+            guard isActive else { return }
+            let key = reviewPreparationKey
+            isPreparingReviews = true
+            let entries = await ReviewListPreparer.shared.prepare(
+                dashboards: model.dashboards,
+                selectedAppID: selectedReviewAppID,
+                filter: filter
+            )
+            guard !Task.isCancelled else {
+                if reviewPreparationKey == key { isPreparingReviews = false }
+                return
+            }
+            preparedEntries = entries
+            preparedKey = key
+            isPreparingReviews = false
+        }
     }
 
     private var scopedDashboards: [AppDashboard] {
@@ -141,18 +162,19 @@ struct ReviewsView: View {
         return model.dashboards.filter { $0.id == selectedReviewAppID }
     }
 
-    private var filteredEntries: [ReviewEntry] {
-        let entries = scopedDashboards.flatMap { dashboard in
-            dashboard.reviews.map { ReviewEntry(review: $0, appName: dashboard.app.name) }
-        }
-        let filteredIDs = Set(filter.apply(to: entries.map(\.review)).map(\.id))
-        return entries
-            .filter { filteredIDs.contains($0.review.id) }
-            .sorted {
-                filter.sort == .newest
-                    ? $0.review.createdDate > $1.review.createdDate
-                    : $0.review.createdDate < $1.review.createdDate
+    private var reviewPreparationKey: ReviewPreparationKey {
+        ReviewPreparationKey(
+            selectedAppID: selectedReviewAppID,
+            filter: filter,
+            dashboards: model.dashboards.map {
+                DashboardReviewVersion(
+                    id: $0.id,
+                    fetchedAt: $0.fetchedAt,
+                    reviewsCount: $0.reviews.count,
+                    nextReviewsPage: $0.nextReviewsPage?.absoluteString
+                )
             }
+        )
     }
 
     private var hasMoreReviews: Bool {
@@ -171,6 +193,58 @@ struct ReviewsView: View {
         for dashboard in scopedDashboards {
             await model.markAllRead(in: dashboard)
         }
+    }
+}
+
+private struct ReviewListEntry: Identifiable, Sendable {
+    let review: CustomerReview
+    let appName: String
+
+    var id: String { review.id }
+}
+
+private struct DashboardReviewVersion: Equatable, Sendable {
+    let id: String
+    let fetchedAt: Date
+    let reviewsCount: Int
+    let nextReviewsPage: String?
+}
+
+private struct ReviewPreparationKey: Equatable, Sendable {
+    let selectedAppID: String?
+    let filter: ReviewFilter
+    let dashboards: [DashboardReviewVersion]
+}
+
+private struct ReviewPreparationTaskID: Equatable, Sendable {
+    let key: ReviewPreparationKey
+    let isActive: Bool
+}
+
+private actor ReviewListPreparer {
+    static let shared = ReviewListPreparer()
+
+    func prepare(
+        dashboards: [AppDashboard],
+        selectedAppID: String?,
+        filter: ReviewFilter
+    ) -> [ReviewListEntry] {
+        let scoped = if let selectedAppID {
+            dashboards.filter { $0.id == selectedAppID }
+        } else {
+            dashboards
+        }
+
+        var entriesByID: [String: ReviewListEntry] = [:]
+        for dashboard in scoped {
+            for review in dashboard.reviews {
+                entriesByID[review.id] = ReviewListEntry(review: review, appName: dashboard.app.name)
+            }
+        }
+
+        return filter
+            .apply(to: entriesByID.values.map(\.review))
+            .compactMap { entriesByID[$0.id] }
     }
 }
 

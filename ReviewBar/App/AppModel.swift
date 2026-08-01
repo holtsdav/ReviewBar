@@ -182,10 +182,6 @@ final class AppModel {
         }
         #endif
 
-        // Remove the legacy local-data flag so upgraded installs always use
-        // the authenticated App Store Connect path.
-        UserDefaults.standard.removeObject(forKey: "ReviewBar.demoMode")
-
         do {
             guard let credential = try await credentialStore.load() else {
                 session = .signedOut
@@ -315,7 +311,11 @@ final class AppModel {
         }
         realtimeOperationID = identifier
         realtimeOperationTask = task
-        await task.value
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
         if realtimeOperationID == identifier {
             realtimeOperationTask = nil
             realtimeOperationID = nil
@@ -397,7 +397,11 @@ final class AppModel {
         }
         realtimeOperationID = identifier
         realtimeOperationTask = task
-        await task.value
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
         if realtimeOperationID == identifier {
             realtimeOperationTask = nil
             realtimeOperationID = nil
@@ -594,7 +598,11 @@ final class AppModel {
         }
         realtimeOperationID = identifier
         realtimeOperationTask = task
-        await task.value
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
         if realtimeOperationID == identifier {
             realtimeOperationTask = nil
             realtimeOperationID = nil
@@ -659,7 +667,11 @@ final class AppModel {
         }
         realtimeOperationID = identifier
         realtimeOperationTask = task
-        await task.value
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
         if realtimeOperationID == identifier {
             realtimeOperationTask = nil
             realtimeOperationID = nil
@@ -993,7 +1005,11 @@ final class AppModel {
         dataTask = task
         operationID = identifier
         do {
-            let collection = try await task.value
+            let collection = try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
             guard operationID == identifier,
                   sessionGeneration == generation,
                   session == .ready else { return }
@@ -1031,7 +1047,11 @@ final class AppModel {
         dataTask = task
         operationID = identifier
         do {
-            let collection = try await task.value
+            let collection = try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
             guard operationID == identifier,
                   sessionGeneration == generation,
                   session == .ready else { return }

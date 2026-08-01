@@ -54,7 +54,12 @@ struct AppIconView: View {
             do {
                 let data = try await loader.data(for: url)
                 guard !Task.isCancelled else { return }
-                image = UIImage(data: data, scale: displayScale)
+                let maxPixelSize = max(1, Int((size * displayScale).rounded(.up)))
+                guard let decoded = await AppIconImageDecoder.shared.decode(
+                    data,
+                    maxPixelSize: maxPixelSize
+                ), !Task.isCancelled else { return }
+                image = UIImage(cgImage: decoded, scale: displayScale, orientation: .up)
             } catch is CancellationError {
                 return
             } catch {

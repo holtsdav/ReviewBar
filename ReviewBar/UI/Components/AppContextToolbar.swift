@@ -56,9 +56,24 @@ struct AppSelectionPicker: View {
 
     private var selectedApp: Binding<String> {
         Binding(
-            get: { selection ?? (includesAllApps ? "" : dashboards.first?.id ?? "") },
+            get: {
+                // A selected app ID can outlive a disconnected account or a
+                // refreshed app list. Never hand an unknown tag to Picker:
+                // SwiftUI may then render a stale/blank value until the parent
+                // has a chance to normalize its binding.
+                guard let selection else { return defaultSelection }
+                if selection.isEmpty && includesAllApps { return "" }
+                guard dashboards.contains(where: { $0.id == selection }) else {
+                    return defaultSelection
+                }
+                return selection
+            },
             set: { selection = $0.isEmpty ? nil : $0 }
         )
+    }
+
+    private var defaultSelection: String {
+        includesAllApps ? "" : dashboards.first?.id ?? ""
     }
 }
 

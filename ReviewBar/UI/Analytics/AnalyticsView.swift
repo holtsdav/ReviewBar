@@ -21,8 +21,6 @@ struct AnalyticsView: View {
                         AppSelectionPicker(dashboards: model.dashboards, selection: $selectedAppID)
                         .accessibilityLabel("Analytics app")
                         .accessibilityValue(dashboard.app.name)
-                    } header: {
-                        Text("App")
                     }
                     Section {
                         Picker("Time Range", selection: $range) {
@@ -95,7 +93,7 @@ struct AnalyticsView: View {
         case .generating(let cached):
             statusContent(
                 title: "Apple Is Preparing Reports",
-                message: "Initial Analytics data normally takes 24–48 hours. Pull to refresh later; existing cached data remains available.",
+                message: "Apple's first Analytics report normally takes 1–2 days to generate. Pull to refresh later; existing cached data remains available.",
                 symbol: "clock",
                 cached: cached
             )
@@ -120,9 +118,11 @@ struct AnalyticsView: View {
                 analyticsContent(cached, refreshing: false)
             } else {
                 Section {
-                    ContentUnavailableView {
-                        Label("Analytics Unavailable", systemImage: "exclamationmark.triangle")
-                    } description: { Text(message) }
+                    AnalyticsStatusMessage(
+                        title: "Analytics Unavailable",
+                        message: message,
+                        symbol: "exclamationmark.triangle"
+                    )
                 }
             }
         }
@@ -148,13 +148,13 @@ struct AnalyticsView: View {
             analyticsContent(cached, refreshing: false)
         } else {
             Section {
-                ContentUnavailableView {
-                    Label(title, systemImage: symbol)
-                } description: {
-                    Text(message)
-                } actions: {
-                    if let actionTitle { Button(actionTitle, action: action) }
-                }
+                AnalyticsStatusMessage(
+                    title: title,
+                    message: message,
+                    symbol: symbol,
+                    actionTitle: actionTitle,
+                    action: action
+                )
             }
         }
     }
@@ -194,11 +194,11 @@ struct AnalyticsView: View {
 
         if dataset.series.isEmpty {
             Section {
-                ContentUnavailableView {
-                    Label("No Analytics Data", systemImage: "chart.xyaxis.line")
-                } description: {
-                    Text("Apple generated the report request, but it contains no supported metric rows yet. Pull to refresh after Apple publishes the next reports.")
-                }
+                AnalyticsStatusMessage(
+                    title: "No Analytics Data",
+                    message: "Apple generated the report request, but it contains no supported metric rows yet. Pull to refresh after Apple publishes the next reports.",
+                    symbol: "chart.xyaxis.line"
+                )
             }
         }
 
@@ -302,6 +302,31 @@ struct AnalyticsView: View {
             return "No reported downloads."
         }
         return "\(total.formatted(.number.precision(.fractionLength(0)))) total downloads from \(first.iso8601) through \(last.iso8601), across \(points.count) reported days."
+    }
+}
+
+private struct AnalyticsStatusMessage: View {
+    let title: String
+    let message: String
+    let symbol: String
+    var actionTitle: String?
+    var action: () -> Void = {}
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(title, systemImage: symbol)
+                .font(.headline)
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let actionTitle {
+                Button(actionTitle, action: action)
+                    .buttonStyle(.bordered)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 10)
     }
 }
 
