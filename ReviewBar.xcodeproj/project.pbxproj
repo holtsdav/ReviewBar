@@ -424,6 +424,7 @@
 						TestTargetID = 817FEA50266ED908BEF84E70;
 					};
 					817FEA50266ED908BEF84E70 = {
+						DevelopmentTeam = Z38CPBG8G6;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -572,13 +573,14 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"ReviewBar/Preview Content\"";
+				DEVELOPMENT_TEAM = Z38CPBG8G6;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ReviewBar/Support/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.reviewbar.ReviewBar;
 				PRODUCT_NAME = ReviewBar;
 				SDKROOT = iphoneos;
@@ -594,13 +596,14 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"ReviewBar/Preview Content\"";
+				DEVELOPMENT_TEAM = Z38CPBG8G6;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ReviewBar/Support/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.reviewbar.ReviewBar;
 				PRODUCT_NAME = ReviewBar;
 				SDKROOT = iphoneos;

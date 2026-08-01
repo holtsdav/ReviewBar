@@ -25,6 +25,8 @@ targets:
       path: ReviewBar/Support/Info.plist
       properties:
         CFBundleDisplayName: ReviewBar
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.developer-tools
         UILaunchScreen:
           UIColorName: ""
@@ -40,9 +42,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.reviewbar.ReviewBar
         PRODUCT_NAME: ReviewBar
         TARGETED_DEVICE_FAMILY: "1"
-        MARKETING_VERSION: 1.0
+        MARKETING_VERSION: 0.1.0
         CURRENT_PROJECT_VERSION: 1
         CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: Z38CPBG8G6
         DEVELOPMENT_ASSET_PATHS: '"ReviewBar/Preview Content"'
         GENERATE_INFOPLIST_FILE: NO
   ReviewBarTests:
