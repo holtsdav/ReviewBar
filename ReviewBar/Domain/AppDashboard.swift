@@ -10,20 +10,43 @@ struct AppDashboard: Identifiable, Codable, Hashable, Sendable {
     var sectionIssues: [DashboardSection: SectionIssue] = [:]
 
     var id: String { app.id }
-    var currentRelease: AppRelease? {
-        releases.first(where: {
-            ![ReleaseState.readyForDistribution, .replacedWithNewVersion].contains($0.state)
-        }) ?? distributionReadyRelease ?? releases.first
+    var availablePlatforms: [AppRelease.Platform] {
+        let values = Set(releases.map(\.platform) + builds.map(\.platform))
+        return values.sorted { $0.sortOrder < $1.sortOrder }
     }
-    var distributionReadyRelease: AppRelease? { releases.first(where: { $0.state == .readyForDistribution }) }
-    var latestBuild: BuildInfo? { builds.first }
+    var preferredPlatform: AppRelease.Platform? {
+        currentRelease?.platform ?? latestBuild?.platform ?? availablePlatforms.first
+    }
+    var currentRelease: AppRelease? {
+        currentRelease(in: nil)
+    }
+    var distributionReadyRelease: AppRelease? { distributionReadyRelease(in: nil) }
+    var latestBuild: BuildInfo? { latestBuild(in: nil) }
     var newestReview: CustomerReview? { reviews.first }
+
+    func currentRelease(in platform: AppRelease.Platform?) -> AppRelease? {
+        let candidates = platform.map { selected in releases.filter { $0.platform == selected } } ?? releases
+        return candidates.first(where: {
+            ![ReleaseState.readyForDistribution, .replacedWithNewVersion].contains($0.state)
+        }) ?? candidates.first(where: { $0.state == .readyForDistribution }) ?? candidates.first
+    }
+
+    func distributionReadyRelease(in platform: AppRelease.Platform?) -> AppRelease? {
+        let candidates = platform.map { selected in releases.filter { $0.platform == selected } } ?? releases
+        return candidates.first(where: { $0.state == .readyForDistribution })
+    }
+
+    func latestBuild(in platform: AppRelease.Platform?) -> BuildInfo? {
+        guard let platform else { return builds.first }
+        return builds.first(where: { $0.platform == platform })
+    }
 }
 
 enum DashboardSection: String, Codable, Hashable, Sendable {
     case releases
     case reviews
     case builds
+    case analytics
 }
 
 struct SectionIssue: Codable, Hashable, Sendable {

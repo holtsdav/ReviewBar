@@ -24,15 +24,19 @@ final class AppModel {
     private(set) var lastUpdated: Date?
     private(set) var showingCachedData = false
     private(set) var lastRefreshIssue: AppError?
+    private(set) var analyticsStates: [String: AnalyticsLoadState] = [:]
     var presentedError: AppError?
 
     private let credentialStore: any CredentialStoring
     private let cache: any SnapshotCaching
     private let liveHistoryStore: ReleaseHistoryStore
     private let liveReadStore: ReviewReadStore
+    private let liveAnalyticsCache: any AnalyticsCaching
     private var historyStore: ReleaseHistoryStore
     private var readStore: ReviewReadStore
+    private var analyticsCache: any AnalyticsCaching
     private var repository: DashboardRepository?
+    private var analyticsRepository: AnalyticsRepository?
     private var hasStarted = false
     private var dataTask: Task<DashboardCollection, Error>?
     private var operationID: UUID?
@@ -43,15 +47,18 @@ final class AppModel {
         credentialStore: any CredentialStoring,
         cache: any SnapshotCaching,
         historyStore: ReleaseHistoryStore,
-        readStore: ReviewReadStore
+        readStore: ReviewReadStore,
+        analyticsCache: any AnalyticsCaching = MemoryAnalyticsCache()
     ) {
         self.session = session
         self.credentialStore = credentialStore
         self.cache = cache
         liveHistoryStore = historyStore
         liveReadStore = readStore
+        liveAnalyticsCache = analyticsCache
         self.historyStore = historyStore
         self.readStore = readStore
+        self.analyticsCache = analyticsCache
     }
 
     static func live() -> AppModel {
@@ -59,7 +66,8 @@ final class AppModel {
             credentialStore: KeychainCredentialStore(),
             cache: SnapshotCache(),
             historyStore: .live(),
-            readStore: .live()
+            readStore: .live(),
+            analyticsCache: AnalyticsCache()
         )
     }
 
@@ -85,6 +93,12 @@ final class AppModel {
             historyStore: model.historyStore,
             readStore: model.readStore
         )
+        let analyticsCache = MemoryAnalyticsCache(datasets: DemoFixtures.dashboards.map { DemoFixtures.analytics(appID: $0.id) })
+        model.analyticsCache = analyticsCache
+        model.analyticsRepository = AnalyticsRepository(provider: DemoAnalyticsProvider(), cache: analyticsCache)
+        model.analyticsStates = Dictionary(uniqueKeysWithValues: DemoFixtures.dashboards.map {
+            ($0.id, .available(DemoFixtures.analytics(appID: $0.id)))
+        })
         return model
     }
 
@@ -189,8 +203,10 @@ final class AppModel {
         isLoadingMoreReviews = false
         let demoHistoryStore = ReleaseHistoryStore()
         let demoReadStore = ReviewReadStore()
+        let demoAnalyticsCache = MemoryAnalyticsCache()
         historyStore = demoHistoryStore
         readStore = demoReadStore
+        analyticsCache = demoAnalyticsCache
         let demoCache = MemorySnapshotCache(collection: DashboardCollection(
             dashboards: scenario.isStandard ? DemoFixtures.dashboards : [],
             fetchedAt: .now
@@ -201,6 +217,7 @@ final class AppModel {
             historyStore: demoHistoryStore,
             readStore: demoReadStore
         )
+        analyticsRepository = AnalyticsRepository(provider: DemoAnalyticsProvider(), cache: demoAnalyticsCache)
         if persist { UserDefaults.standard.set(true, forKey: "ReviewBar.demoMode") }
         source = .demo
         session = .ready
@@ -208,6 +225,7 @@ final class AppModel {
         lastUpdated = .now
         showingCachedData = false
         lastRefreshIssue = nil
+        analyticsStates = [:]
         if case .failure(let error) = scenario {
             presentedError = error
             lastRefreshIssue = error
@@ -225,6 +243,97 @@ final class AppModel {
             presentedError = AppError.map(error)
         }
         await updateUnreadState()
+    }
+
+    func analyticsState(for appID: String) -> AnalyticsLoadState {
+        analyticsStates[appID] ?? .idle
+    }
+
+    func cachedDataSizeInBytes() async -> Int64 {
+        let snapshotBytes = await cache.sizeInBytes()
+        let analyticsBytes = await analyticsCache.sizeInBytes()
+        let iconBytes = await AppIconCache.shared.sizeInBytes()
+        return snapshotBytes + analyticsBytes + iconBytes
+    }
+
+    func clearCachedData() async {
+        do {
+            try await cache.clear()
+            if let analyticsRepository {
+                try await analyticsRepository.clear()
+            } else {
+                try await analyticsCache.clear()
+            }
+            try await AppIconCache.shared.clear()
+            analyticsStates = [:]
+        } catch {
+            presentedError = AppError(
+                kind: .secureStorage,
+                message: "ReviewBar couldn't completely clear its local cache. Try again after restarting the app."
+            )
+        }
+    }
+
+    /// Makes cached Analytics visible without waiting for report discovery or downloads.
+    func prepareAnalytics(appID: String) async {
+        guard analyticsStates[appID] == nil || analyticsStates[appID] == .idle,
+              let analyticsRepository else { return }
+        if let cached = try? await analyticsRepository.cached(appID: appID) {
+            analyticsStates[appID] = .available(cached)
+        }
+    }
+
+    func loadAnalytics(appID: String, force: Bool = false) async {
+        guard let analyticsRepository else { return }
+        let current = analyticsStates[appID] ?? .idle
+        if case .loading = current { return }
+        if !force, case .available(let dataset) = current,
+           Date.now.timeIntervalSince(dataset.fetchedAt) < 15 * 60 { return }
+
+        let cached: AnalyticsDataset?
+        if let currentDataset = current.cachedDataset {
+            cached = currentDataset
+        } else {
+            cached = try? await analyticsRepository.cached(appID: appID)
+        }
+        analyticsStates[appID] = .loading(cached: cached)
+        do {
+            switch try await analyticsRepository.refresh(appID: appID) {
+            case .dataset(let dataset): analyticsStates[appID] = .available(dataset)
+            case .notEnabled: analyticsStates[appID] = .notEnabled
+            case .generating: analyticsStates[appID] = .generating
+            case .stoppedDueToInactivity: analyticsStates[appID] = .stoppedDueToInactivity
+            }
+        } catch is CancellationError {
+            analyticsStates[appID] = cached.map(AnalyticsLoadState.available) ?? .idle
+        } catch {
+            let mapped = AppError.map(error)
+            if mapped.kind == .insufficientPermission {
+                analyticsStates[appID] = .permissionRequired(
+                    "This key can't read Analytics Reports. Use an Admin, Sales and Reports, or Finance API key with access to this app."
+                )
+            } else {
+                analyticsStates[appID] = .failed(message: mapped.message, cached: cached)
+            }
+        }
+    }
+
+    func enableAnalytics(appID: String) async {
+        guard let analyticsRepository else { return }
+        analyticsStates[appID] = .loading(cached: nil)
+        do {
+            try await analyticsRepository.createOngoingRequest(appID: appID)
+            analyticsStates[appID] = .generating
+        } catch {
+            let mapped = AppError.map(error)
+            if mapped.kind == .insufficientPermission {
+                analyticsStates[appID] = .permissionRequired(
+                    "An Admin API key is required to create the initial ongoing Analytics Report request for this app."
+                )
+            } else {
+                analyticsStates[appID] = .failed(message: mapped.message, cached: nil)
+            }
+        }
     }
 
     func refresh() async {
@@ -371,11 +480,13 @@ final class AppModel {
 
         // Drop the in-memory signer immediately after the Keychain item is gone.
         repository = nil
+        analyticsRepository = nil
         let cleanupSucceeded = await clearLiveLocalData()
         UserDefaults.standard.set(!cleanupSucceeded, forKey: "ReviewBar.pendingLocalCleanup")
 
         UserDefaults.standard.set(false, forKey: "ReviewBar.demoMode")
         dashboards = []
+        analyticsStates = [:]
         unreadReviewIDs = []
         lastUpdated = nil
         showingCachedData = false
@@ -403,7 +514,9 @@ final class AppModel {
 
         UserDefaults.standard.set(false, forKey: "ReviewBar.demoMode")
         repository = nil
+        analyticsRepository = nil
         dashboards = []
+        analyticsStates = [:]
         unreadReviewIDs = []
         lastUpdated = nil
         showingCachedData = false
@@ -411,6 +524,7 @@ final class AppModel {
         source = .live
         historyStore = liveHistoryStore
         readStore = liveReadStore
+        analyticsCache = liveAnalyticsCache
 
         do {
             guard let credential = try await credentialStore.load() else {
@@ -441,14 +555,17 @@ final class AppModel {
 
     private func configureLiveRepository(credential: AppStoreConnectCredential) async throws {
         let provider = try AppStoreConnectDataProvider(credential: credential)
+        let analyticsProvider = try AppStoreConnectAnalyticsProvider(credential: credential)
         historyStore = liveHistoryStore
         readStore = liveReadStore
+        analyticsCache = liveAnalyticsCache
         repository = DashboardRepository(
             provider: provider,
             cache: cache,
             historyStore: liveHistoryStore,
             readStore: liveReadStore
         )
+        analyticsRepository = AnalyticsRepository(provider: analyticsProvider, cache: liveAnalyticsCache)
     }
 
     private func clearLiveLocalData() async -> Bool {
@@ -456,6 +573,8 @@ final class AppModel {
         do { try await cache.clear() } catch { succeeded = false }
         do { try await liveReadStore.clear() } catch { succeeded = false }
         do { try await liveHistoryStore.clear() } catch { succeeded = false }
+        do { try await liveAnalyticsCache.clear() } catch { succeeded = false }
+        do { try await AppIconCache.shared.clear() } catch { succeeded = false }
         return succeeded
     }
 

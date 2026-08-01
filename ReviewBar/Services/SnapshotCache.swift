@@ -4,6 +4,7 @@ protocol SnapshotCaching: Sendable {
     func load() async throws -> DashboardCollection?
     func save(_ collection: DashboardCollection) async throws
     func clear() async throws
+    func sizeInBytes() async -> Int64
 }
 
 actor SnapshotCache: SnapshotCaching {
@@ -38,6 +39,10 @@ actor SnapshotCache: SnapshotCaching {
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
         try FileManager.default.removeItem(at: fileURL)
     }
+
+    func sizeInBytes() -> Int64 {
+        Int64((try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+    }
 }
 
 actor MemorySnapshotCache: SnapshotCaching {
@@ -50,5 +55,5 @@ actor MemorySnapshotCache: SnapshotCaching {
     func load() -> DashboardCollection? { collection }
     func save(_ collection: DashboardCollection) { self.collection = collection }
     func clear() { collection = nil }
+    func sizeInBytes() -> Int64 { 0 }
 }
-

@@ -6,5 +6,5 @@ struct DeveloperApp: Identifiable, Codable, Hashable, Sendable {
     let bundleID: String
     let sku: String?
     let primaryLocale: String?
+    var iconAsset: AppIconAsset? = nil
 }
-

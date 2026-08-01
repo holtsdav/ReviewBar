@@ -3,16 +3,25 @@ import SwiftUI
 struct BuildsView: View {
     let model: AppModel
     let dashboard: AppDashboard?
-    @Binding var selectedAppID: String?
+    @State private var selectedPlatform: AppRelease.Platform?
     @State private var filter: BuildFilter = .all
     @State private var sort: BuildSort = .newest
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    init(model: AppModel, dashboard: AppDashboard?, initialPlatform: AppRelease.Platform?) {
+        self.model = model
+        self.dashboard = dashboard
+        _selectedPlatform = State(initialValue: initialPlatform ?? dashboard?.preferredPlatform)
+    }
 
     var body: some View {
         Group {
             if let dashboard {
                 List {
                     SelectedAppHeader(name: dashboard.app.name)
+                    Section {
+                        PlatformPicker(platforms: dashboard.availablePlatforms, selection: $selectedPlatform)
+                    }
                     if model.showingCachedData {
                         DataStatusBanner(lastUpdated: model.lastUpdated, issue: model.lastRefreshIssue)
                     }
@@ -67,12 +76,12 @@ struct BuildsView: View {
         }
         .navigationTitle("Builds")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { AppContextToolbar(dashboards: model.dashboards, selectedAppID: $selectedAppID) }
     }
 
     private var visibleBuilds: [BuildInfo] {
         guard let dashboard else { return [] }
         let filtered = dashboard.builds.filter { build in
+            guard selectedPlatform == nil || build.platform == selectedPlatform else { return false }
             switch filter {
             case .all: return true
             case .processing: return !build.expired && build.processingState == .processing

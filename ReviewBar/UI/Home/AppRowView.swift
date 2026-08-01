@@ -11,7 +11,7 @@ struct AppRowView: View {
                 content
             } else {
                 HStack(alignment: .top, spacing: 14) {
-                    AppGlyph(name: dashboard.app.name)
+                    AppIconView(asset: dashboard.app.iconAsset, appName: dashboard.app.name)
                     content
                     Spacer(minLength: 4)
                     Image(systemName: "chevron.right")
@@ -33,7 +33,15 @@ struct AppRowView: View {
                     .foregroundStyle(.primary)
                     .lineLimit(2)
 
-                if let release = dashboard.currentRelease {
+                if dashboard.availablePlatforms.count > 1 {
+                    ForEach(dashboard.availablePlatforms, id: \.self) { platform in
+                        PlatformSummaryRow(
+                            platform: platform,
+                            release: dashboard.currentRelease(in: platform),
+                            build: dashboard.latestBuild(in: platform)
+                        )
+                    }
+                } else if let release = dashboard.currentRelease {
                     Group {
                         if dynamicTypeSize.isAccessibilitySize {
                             VStack(alignment: .leading, spacing: 4) {
@@ -83,18 +91,28 @@ struct AppRowView: View {
     }
 }
 
-private struct AppGlyph: View {
-    let name: String
+private struct PlatformSummaryRow: View {
+    let platform: AppRelease.Platform
+    let release: AppRelease?
+    let build: BuildInfo?
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(.tint.opacity(0.13))
-            Text(String(name.prefix(1)).uppercased())
-                .font(.title2.bold())
-                .foregroundStyle(.tint)
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Label(platform.label, systemImage: platform.symbol)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 58, alignment: .leading)
+            if let release {
+                Text(release.version).fontWeight(.medium)
+                Text("·")
+                Text(release.state.title)
+                    .foregroundStyle(release.state.tint)
+            } else if let build {
+                Text("Build \(build.buildNumber) · \(build.processingState.title)")
+            } else {
+                Text("No release")
+            }
         }
-        .frame(width: 48, height: 48)
-        .accessibilityHidden(true)
+        .font(.caption)
     }
 }

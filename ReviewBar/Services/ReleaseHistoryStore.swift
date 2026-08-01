@@ -44,8 +44,36 @@ actor ReleaseHistoryStore {
         }
     }
 
+    /// Records an exact timestamp supplied by Apple, for example from an App
+    /// Store Connect webhook. Event IDs make relay redelivery idempotent.
+    func recordAuthoritative(
+        eventID: String,
+        appID: String,
+        releaseID: String,
+        version: String,
+        state: ReleaseState,
+        occurredAt: Date,
+        source: ReleaseObservation.Source
+    ) throws {
+        guard source != .localObservation,
+              !observations.contains(where: { $0.externalEventID == eventID }) else { return }
+        var candidate = observations
+        candidate.append(ReleaseObservation(
+            id: UUID(),
+            appID: appID,
+            releaseID: releaseID,
+            version: version,
+            state: state,
+            observedAt: occurredAt,
+            source: source,
+            externalEventID: eventID
+        ))
+        try persist(candidate)
+        observations = candidate
+    }
+
     func observations(for releaseID: String) -> [ReleaseObservation] {
-        observations.filter { $0.releaseID == releaseID }.sorted { $0.observedAt < $1.observedAt }
+        preferredTimeline(observations.filter { $0.releaseID == releaseID })
     }
 
     func statistics(appID: String) -> ReleaseStatistics {
@@ -56,7 +84,7 @@ actor ReleaseHistoryStore {
         var approvals: [TimeInterval] = []
 
         for values in grouped.values {
-            let ordered = values.sorted { $0.observedAt < $1.observedAt }
+            let ordered = preferredTimeline(values)
             for approvalIndex in ordered.indices where approvedStates.contains(ordered[approvalIndex].state) {
                 guard approvalIndex >= 2,
                       ordered[approvalIndex - 1].state == .inReview,
@@ -93,6 +121,28 @@ actor ReleaseHistoryStore {
             to: fileURL,
             options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
         )
+    }
+
+    /// Webhook delivery can arrive after a foreground refresh has already made
+    /// a local observation. Collapse only consecutive copies of the same state,
+    /// preferring the most authoritative source without erasing later review
+    /// attempts that are separated by a different state.
+    private func preferredTimeline(_ values: [ReleaseObservation]) -> [ReleaseObservation] {
+        let ordered = values.sorted {
+            if $0.observedAt == $1.observedAt { return $0.source.authority > $1.source.authority }
+            return $0.observedAt < $1.observedAt
+        }
+        var result: [ReleaseObservation] = []
+        for value in ordered {
+            guard let last = result.last, last.state == value.state else {
+                result.append(value)
+                continue
+            }
+            if value.source.authority > last.source.authority {
+                result[result.count - 1] = value
+            }
+        }
+        return result
     }
 
     private var approvedStates: Set<ReleaseState> {

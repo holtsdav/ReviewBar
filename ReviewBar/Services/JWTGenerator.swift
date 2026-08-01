@@ -35,7 +35,15 @@ actor JWTGenerator {
     }
 
     func token(forGETPath path: String, now: Date = .now) throws -> Token {
-        let scope = "GET \(path)"
+        try token(method: "GET", path: path, now: now)
+    }
+
+    func token(method: String, path: String, now: Date = .now) throws -> Token {
+        let normalizedMethod = method.uppercased()
+        guard ["GET", "POST", "PATCH", "DELETE"].contains(normalizedMethod), path.hasPrefix("/v1/") else {
+            throw AppError(kind: .invalidCredentials, message: "ReviewBar could not scope an App Store Connect token safely.")
+        }
+        let scope = "\(normalizedMethod) \(path)"
         if let cached = cache[scope], cached.token.expiresAt.timeIntervalSince(now) > 60 {
             return cached.token
         }
@@ -79,12 +87,11 @@ actor JWTGenerator {
         return token
     }
 
-    func invalidate(path: String? = nil) {
+    func invalidate(method: String = "GET", path: String? = nil) {
         if let path {
-            cache["GET \(path)"] = nil
+            cache["\(method.uppercased()) \(path)"] = nil
         } else {
             cache.removeAll(keepingCapacity: false)
         }
     }
 }
-

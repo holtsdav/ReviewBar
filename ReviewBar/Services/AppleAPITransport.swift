@@ -33,19 +33,41 @@ actor AppleAPITransport {
 
     func get(_ url: URL) async throws -> AppleAPIResponse {
         try validate(url)
-        return try await perform(url, mayRetryAuthentication: true)
+        return try await perform(method: "GET", url: url, body: nil, mayRetryAuthentication: true)
     }
 
-    private func perform(_ url: URL, mayRetryAuthentication: Bool) async throws -> AppleAPIResponse {
+    func post(_ url: URL, body: Data) async throws -> AppleAPIResponse {
+        try validate(url)
+        return try await perform(method: "POST", url: url, body: body, mayRetryAuthentication: true)
+    }
+
+    func patch(_ url: URL, body: Data) async throws -> AppleAPIResponse {
+        try validate(url)
+        return try await perform(method: "PATCH", url: url, body: body, mayRetryAuthentication: true)
+    }
+
+    func delete(_ url: URL) async throws -> AppleAPIResponse {
+        try validate(url)
+        return try await perform(method: "DELETE", url: url, body: nil, mayRetryAuthentication: true)
+    }
+
+    private func perform(
+        method: String,
+        url: URL,
+        body: Data?,
+        mayRetryAuthentication: Bool
+    ) async throws -> AppleAPIResponse {
         try Task.checkCancellation()
         let path = url.path(percentEncoded: true)
         let requestTarget = url.query(percentEncoded: true).map { "\(path)?\($0)" } ?? path
-        let token = try await signer.token(forGETPath: requestTarget)
+        let token = try await signer.token(method: method, path: requestTarget)
         var request = URLRequest(url: url)
-        request.httpMethod = "GET"
+        request.httpMethod = method
+        request.httpBody = body
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         request.setValue("Bearer \(token.value)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
 
         let (data, response) = try await session.data(for: request)
         try Task.checkCancellation()
@@ -62,8 +84,8 @@ actor AppleAPITransport {
 
         switch http.statusCode {
         case 401 where mayRetryAuthentication:
-            await signer.invalidate(path: requestTarget)
-            return try await perform(url, mayRetryAuthentication: false)
+            await signer.invalidate(method: method, path: requestTarget)
+            return try await perform(method: method, url: url, body: body, mayRetryAuthentication: false)
         case 401:
             throw AppleHTTPErrorMapper.map(statusCode: http.statusCode, data: data, retryAfterHeader: nil)
         default:

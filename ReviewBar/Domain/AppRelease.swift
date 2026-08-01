@@ -30,6 +30,26 @@ struct AppRelease: Identifiable, Codable, Hashable, Sendable {
             }
         }
 
+        var sortOrder: Int {
+            switch self {
+            case .iOS: 0
+            case .macOS: 1
+            case .tvOS: 2
+            case .visionOS: 3
+            case .unknown: 99
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .iOS: "iphone"
+            case .macOS: "macbook"
+            case .tvOS: "appletv"
+            case .visionOS: "vision.pro"
+            case .unknown: "app"
+            }
+        }
+
         init(apiValue: String) {
             self = Self(rawValue: apiValue) ?? .unknown
         }

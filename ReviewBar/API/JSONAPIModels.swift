@@ -19,6 +19,10 @@ struct ToOneRelationship: Decodable, Sendable {
     let data: ResourceIdentifier?
 }
 
+struct ToManyRelationship: Decodable, Sendable {
+    let data: [ResourceIdentifier]
+}
+
 struct EmptyIncluded: Decodable, Sendable {}
 
 struct AppAPIResource: Decodable, Sendable {
@@ -29,9 +33,43 @@ struct AppAPIResource: Decodable, Sendable {
         let primaryLocale: String?
     }
 
+    struct Relationships: Decodable, Sendable {
+        let appStoreIcon: ToOneRelationship?
+    }
+
     let type: String
     let id: String
     let attributes: Attributes
+    let relationships: Relationships?
+}
+
+struct ImageAssetAPIValue: Decodable, Sendable {
+    let templateUrl: URL?
+    let width: Int?
+    let height: Int?
+}
+
+struct BuildIconAPIResource: Decodable, Sendable {
+    struct Attributes: Decodable, Sendable {
+        let iconAsset: ImageAssetAPIValue?
+        let iconType: String?
+        let masked: Bool?
+        let name: String?
+    }
+
+    let type: String
+    let id: String
+    let attributes: Attributes?
+
+    func iconAsset(source: AppIconAsset.Source) -> AppIconAsset? {
+        guard let image = attributes?.iconAsset, let templateURL = image.templateUrl else { return nil }
+        return AppIconAsset(
+            templateURL: templateURL,
+            width: image.width,
+            height: image.height,
+            source: source
+        )
+    }
 }
 
 struct VersionAPIResource: Decodable, Sendable {
@@ -56,7 +94,7 @@ struct VersionAPIResource: Decodable, Sendable {
 
 struct ReviewSubmissionAPIResource: Decodable, Sendable {
     struct Attributes: Decodable, Sendable {
-        let platform: String
+        let platform: String?
         let submittedDate: Date?
         let state: String
     }
@@ -119,6 +157,7 @@ struct BuildAPIResource: Decodable, Sendable {
         let buildBetaDetail: ToOneRelationship?
         let betaAppReviewSubmission: ToOneRelationship?
         let appStoreVersion: ToOneRelationship?
+        let icons: ToManyRelationship?
     }
 
     let type: String
@@ -151,10 +190,15 @@ enum BuildIncludedAPIResource: Decodable, Sendable {
         let versionString: String?
     }
 
+    struct BuildIcon: Sendable {
+        let resource: BuildIconAPIResource
+    }
+
     case preReleaseVersion(PreReleaseVersion)
     case betaDetail(BetaDetail)
     case betaSubmission(BetaSubmission)
     case appStoreVersion(AppStoreVersionReference)
+    case buildIcon(BuildIcon)
     case unsupported(type: String, id: String)
 
     private enum CodingKeys: String, CodingKey {
@@ -205,6 +249,9 @@ enum BuildIncludedAPIResource: Decodable, Sendable {
         case "appStoreVersions":
             let attributes = try container.decode(AppStoreVersionAttributes.self, forKey: .attributes)
             self = .appStoreVersion(AppStoreVersionReference(id: id, versionString: attributes.versionString))
+        case "buildIcons":
+            let resource = try BuildIconAPIResource(from: decoder)
+            self = .buildIcon(BuildIcon(resource: resource))
         default:
             self = .unsupported(type: type, id: id)
         }
@@ -228,4 +275,3 @@ enum AppleAPIDecoder {
         return decoder
     }
 }
-

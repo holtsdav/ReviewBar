@@ -6,9 +6,8 @@ struct HomeView: View {
     @State private var selectedAppID: String?
     @State private var appsPath = NavigationPath()
     @State private var overviewPath = NavigationPath()
-    @State private var releasesPath = NavigationPath()
     @State private var reviewsPath = NavigationPath()
-    @State private var buildsPath = NavigationPath()
+    @State private var analyticsPath = NavigationPath()
 
     init(model: AppModel) {
         self.model = model
@@ -34,15 +33,17 @@ struct HomeView: View {
                     selectedAppID: $selectedAppID,
                     selectedTab: $selectedTab
                 )
+                .navigationDestination(for: OverviewRoute.self) { route in
+                    switch route {
+                    case .releaseHistory(let platform):
+                        ReleasesView(model: model, dashboard: selectedDashboard, initialPlatform: platform)
+                    case .builds(let platform):
+                        BuildsView(model: model, dashboard: selectedDashboard, initialPlatform: platform)
+                    }
+                }
             }
             .tabItem { Label("Overview", systemImage: "rectangle.grid.1x2") }
             .tag(DashboardTab.overview)
-
-            NavigationStack(path: $releasesPath) {
-                ReleasesView(model: model, dashboard: selectedDashboard, selectedAppID: $selectedAppID)
-            }
-            .tabItem { Label("Releases", systemImage: "point.3.connected.trianglepath.dotted") }
-            .tag(DashboardTab.releases)
 
             NavigationStack(path: $reviewsPath) {
                 ReviewsView(model: model, dashboard: selectedDashboard, selectedAppID: $selectedAppID)
@@ -51,19 +52,18 @@ struct HomeView: View {
             .badge(unreadCount)
             .tag(DashboardTab.reviews)
 
-            NavigationStack(path: $buildsPath) {
-                BuildsView(model: model, dashboard: selectedDashboard, selectedAppID: $selectedAppID)
+            NavigationStack(path: $analyticsPath) {
+                AnalyticsView(model: model, dashboard: selectedDashboard, selectedAppID: $selectedAppID)
             }
-            .tabItem { Label("Builds", systemImage: "hammer") }
-            .tag(DashboardTab.builds)
+            .tabItem { Label("Analytics", systemImage: "chart.xyaxis.line") }
+            .tag(DashboardTab.analytics)
         }
         .onChange(of: selectedAppID) { _, newValue in
             UserDefaults.standard.set(newValue, forKey: "ReviewBar.selectedAppID")
             appsPath = NavigationPath()
             overviewPath = NavigationPath()
-            releasesPath = NavigationPath()
             reviewsPath = NavigationPath()
-            buildsPath = NavigationPath()
+            analyticsPath = NavigationPath()
         }
         .onChange(of: model.dashboards.map(\.id), initial: true) { _, ids in
             if selectedAppID == nil || !ids.contains(selectedAppID ?? "") {
@@ -85,9 +85,13 @@ struct HomeView: View {
 enum DashboardTab: Hashable {
     case apps
     case overview
-    case releases
     case reviews
-    case builds
+    case analytics
+}
+
+enum OverviewRoute: Hashable {
+    case releaseHistory(AppRelease.Platform?)
+    case builds(AppRelease.Platform?)
 }
 
 #Preview("Demo Dashboard") {

@@ -3,7 +3,7 @@ import SwiftUI
 struct ReleasesView: View {
     let model: AppModel
     let dashboard: AppDashboard?
-    @Binding var selectedAppID: String?
+    @State private var selectedPlatform: AppRelease.Platform?
     @State private var observations: [ReleaseObservation] = []
     @State private var statistics = ReleaseStatistics(
         averageWaiting: nil,
@@ -15,11 +15,20 @@ struct ReleasesView: View {
     @State private var showingTimingHelp = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    init(model: AppModel, dashboard: AppDashboard?, initialPlatform: AppRelease.Platform?) {
+        self.model = model
+        self.dashboard = dashboard
+        _selectedPlatform = State(initialValue: initialPlatform ?? dashboard?.preferredPlatform)
+    }
+
     var body: some View {
         Group {
             if let dashboard {
                 List {
                     SelectedAppHeader(name: dashboard.app.name)
+                    Section {
+                        PlatformPicker(platforms: dashboard.availablePlatforms, selection: $selectedPlatform)
+                    }
                     if model.showingCachedData {
                         DataStatusBanner(lastUpdated: model.lastUpdated, issue: model.lastRefreshIssue)
                     }
@@ -29,7 +38,7 @@ struct ReleasesView: View {
                         }
                     }
 
-                    if let current = dashboard.currentRelease {
+                    if let current = currentRelease {
                         Section("Current Release") {
                             VStack(alignment: .leading, spacing: 10) {
                                 if dynamicTypeSize.isAccessibilitySize {
@@ -86,9 +95,9 @@ struct ReleasesView: View {
                         }
                     }
 
-                    if !dashboard.releases.isEmpty {
+                    if !scopedReleases.isEmpty {
                         Section("All Versions") {
-                            ForEach(dashboard.releases) { release in
+                            ForEach(scopedReleases) { release in
                                 ReleaseRow(release: release)
                             }
                         }
@@ -96,7 +105,7 @@ struct ReleasesView: View {
                 }
                 .refreshable { await model.refresh() }
                 .task(id: releaseTaskID(for: dashboard)) {
-                    if let releaseID = dashboard.currentRelease?.id {
+                    if let releaseID = currentRelease?.id {
                         observations = await model.observations(for: releaseID)
                     }
                     statistics = await model.statistics(for: dashboard.id)
@@ -107,7 +116,6 @@ struct ReleasesView: View {
         }
         .navigationTitle("Releases")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { AppContextToolbar(dashboards: model.dashboards, selectedAppID: $selectedAppID) }
         .sheet(isPresented: $showingTimingHelp) {
             NavigationStack {
                 List {
@@ -134,8 +142,17 @@ struct ReleasesView: View {
     }
 
     private func releaseTaskID(for dashboard: AppDashboard) -> String {
-        let release = dashboard.currentRelease
+        let release = currentRelease
         return "\(release?.id ?? "none")|\(release?.state.rawValue ?? "none")|\(dashboard.fetchedAt.timeIntervalSince1970)"
+    }
+
+    private var scopedReleases: [AppRelease] {
+        guard let dashboard, let selectedPlatform else { return dashboard?.releases ?? [] }
+        return dashboard.releases.filter { $0.platform == selectedPlatform }
+    }
+
+    private var currentRelease: AppRelease? {
+        dashboard?.currentRelease(in: selectedPlatform)
     }
 }
 

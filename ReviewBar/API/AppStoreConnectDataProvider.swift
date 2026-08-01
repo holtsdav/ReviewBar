@@ -20,12 +20,14 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
 
     func fetchApps() async throws -> [DeveloperApp] {
         let url = try makeURL(path: "apps", query: [
-            URLQueryItem(name: "filter[appStoreVersions.platform]", value: "IOS"),
-            URLQueryItem(name: "fields[apps]", value: "name,bundleId,sku,primaryLocale"),
+            URLQueryItem(name: "fields[apps]", value: "name,bundleId,sku,primaryLocale,appStoreIcon"),
+            URLQueryItem(name: "include", value: "appStoreIcon"),
+            URLQueryItem(name: "fields[buildIcons]", value: "iconAsset,iconType,masked,name"),
             URLQueryItem(name: "sort", value: "name"),
             URLQueryItem(name: "limit", value: "200")
         ])
-        let pages: ([AppAPIResource], [EmptyIncluded]) = try await fetchAllPages(from: url)
+        let pages: ([AppAPIResource], [BuildIconAPIResource]) = try await fetchAllPages(from: url)
+        let iconsByID = Dictionary(uniqueKeysWithValues: pages.1.map { ($0.id, $0) })
         var seen: Set<String> = []
         return pages.0.compactMap { resource -> DeveloperApp? in
             guard seen.insert(resource.id).inserted else { return nil }
@@ -34,7 +36,9 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
                 name: resource.attributes.name,
                 bundleID: resource.attributes.bundleId,
                 sku: resource.attributes.sku,
-                primaryLocale: resource.attributes.primaryLocale
+                primaryLocale: resource.attributes.primaryLocale,
+                iconAsset: resource.relationships?.appStoreIcon?.data
+                    .flatMap { iconsByID[$0.id] }?.iconAsset(source: .appStore)
             )
         }
     }
@@ -53,11 +57,14 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
         if case .failure(let error) = builds { issues[.builds] = SectionIssue(error: error) }
 
         let reviewPage = (try? reviews.get()) ?? ReviewPage(reviews: [], nextPage: nil)
+        let fetchedBuilds = (try? builds.get()) ?? FetchedBuilds(builds: [], fallbackIcon: nil)
+        var resolvedApp = app
+        if resolvedApp.iconAsset == nil { resolvedApp.iconAsset = fetchedBuilds.fallbackIcon }
         return AppDashboard(
-            app: app,
+            app: resolvedApp,
             releases: (try? releases.get()) ?? [],
             reviews: reviewPage.reviews,
-            builds: (try? builds.get()) ?? [],
+            builds: fetchedBuilds.builds,
             nextReviewsPage: reviewPage.nextPage,
             fetchedAt: .now,
             sectionIssues: issues
@@ -75,12 +82,10 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
 
     private func fetchReleases(appID: String) async throws -> [AppRelease] {
         let versionsURL = try makeURL(path: "apps/\(appID)/appStoreVersions", query: [
-            URLQueryItem(name: "filter[platform]", value: "IOS"),
             URLQueryItem(name: "fields[appStoreVersions]", value: "platform,versionString,appVersionState,releaseType,earliestReleaseDate,createdDate,build"),
             URLQueryItem(name: "limit", value: "200")
         ])
         let submissionsURL = try makeURL(path: "apps/\(appID)/reviewSubmissions", query: [
-            URLQueryItem(name: "filter[platform]", value: "IOS"),
             URLQueryItem(name: "fields[reviewSubmissions]", value: "platform,submittedDate,state,appStoreVersionForReview"),
             URLQueryItem(name: "limit", value: "200")
         ])
@@ -134,16 +139,17 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
         return try await fetchReviewsPage(at: url)
     }
 
-    private func fetchBuilds(appID: String) async throws -> [BuildInfo] {
+    private func fetchBuilds(appID: String) async throws -> FetchedBuilds {
         let url = try makeURL(path: "builds", query: [
             URLQueryItem(name: "filter[app]", value: appID),
-            URLQueryItem(name: "filter[preReleaseVersion.platform]", value: "IOS"),
-            URLQueryItem(name: "include", value: "preReleaseVersion,buildBetaDetail,betaAppReviewSubmission,appStoreVersion"),
-            URLQueryItem(name: "fields[builds]", value: "version,uploadedDate,expirationDate,expired,processingState,minOsVersion,buildAudienceType,preReleaseVersion,buildBetaDetail,betaAppReviewSubmission,appStoreVersion"),
+            URLQueryItem(name: "include", value: "preReleaseVersion,buildBetaDetail,betaAppReviewSubmission,appStoreVersion,icons"),
+            URLQueryItem(name: "fields[builds]", value: "version,uploadedDate,expirationDate,expired,processingState,minOsVersion,buildAudienceType,preReleaseVersion,buildBetaDetail,betaAppReviewSubmission,appStoreVersion,icons"),
             URLQueryItem(name: "fields[preReleaseVersions]", value: "version,platform"),
             URLQueryItem(name: "fields[buildBetaDetails]", value: "internalBuildState,externalBuildState"),
             URLQueryItem(name: "fields[betaAppReviewSubmissions]", value: "betaReviewState,submittedDate"),
             URLQueryItem(name: "fields[appStoreVersions]", value: "versionString"),
+            URLQueryItem(name: "fields[buildIcons]", value: "iconAsset,iconType,masked,name"),
+            URLQueryItem(name: "limit[icons]", value: "50"),
             URLQueryItem(name: "sort", value: "-uploadedDate"),
             URLQueryItem(name: "limit", value: "200")
         ])
@@ -155,12 +161,14 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
         var betaDetails: [String: BuildIncludedAPIResource.BetaDetail] = [:]
         var betaSubmissions: [String: BuildIncludedAPIResource.BetaSubmission] = [:]
         var appVersions: [String: BuildIncludedAPIResource.AppStoreVersionReference] = [:]
+        var icons: [String: BuildIconAPIResource] = [:]
         for included in pages.1 {
             switch included {
             case .preReleaseVersion(let value): preReleases[value.id] = value
             case .betaDetail(let value): betaDetails[value.id] = value
             case .betaSubmission(let value): betaSubmissions[value.id] = value
             case .appStoreVersion(let value): appVersions[value.id] = value
+            case .buildIcon(let value): icons[value.resource.id] = value.resource
             case .unsupported: break
             }
         }
@@ -190,13 +198,18 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
                 selectedForAppStoreVersion: appVersion?.versionString
             )
         }
-        return Self.iOSBuilds(mappedBuilds).sorted { lhs, rhs in
+        let sortedBuilds = mappedBuilds.sorted { lhs, rhs in
             (lhs.uploadedDate ?? .distantPast) > (rhs.uploadedDate ?? .distantPast)
         }
-    }
-
-    static func iOSBuilds(_ builds: [BuildInfo]) -> [BuildInfo] {
-        builds.filter { $0.platform == .iOS }
+        let resourcesByID = Dictionary(uniqueKeysWithValues: pages.0.map { ($0.id, $0) })
+        let fallbackIcon = sortedBuilds.lazy.compactMap { build -> AppIconAsset? in
+            guard let resource = resourcesByID[build.id] else { return nil }
+            return resource.relationships?.icons?.data.lazy
+                .compactMap { icons[$0.id] }
+                .first(where: { $0.attributes?.iconType == "APP_STORE" })?
+                .iconAsset(source: .build)
+        }.first
+        return FetchedBuilds(builds: sortedBuilds, fallbackIcon: fallbackIcon)
     }
 
     private func mapReviews(
@@ -290,4 +303,9 @@ struct AppStoreConnectDataProvider: DashboardDataProviding, Sendable {
             return .failure(error)
         }
     }
+}
+
+private struct FetchedBuilds: Sendable {
+    let builds: [BuildInfo]
+    let fallbackIcon: AppIconAsset?
 }
