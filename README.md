@@ -13,7 +13,7 @@ The project targets iOS 26, Swift 6 strict concurrency, SwiftUI, and version **0
 - **Analytics:** official Analytics Reports discovery, initial ongoing-request creation, report/instance/segment pagination, gzip TSV import, schema validation, correction handling, aggregation, caching, data-through dates, and 7D/30D/90D/1Y ranges.
 - **Settings:** compact grouped account, data, optional notification, developer, privacy, and about controls.
 - **Real-time updates:** optional per-app release, build-upload, and external-TestFlight alerts through official App Store Connect webhooks and the small Cloudflare relay in `NotificationRelay/`.
-- **Resilience:** stale-while-refresh launch, section-level cached fallback, explicit permission/offline/rate-limit/malformed/error states, and deterministic demo/empty/failure scenarios.
+- **Resilience:** stale-while-refresh launch, section-level cached fallback, explicit permission/offline/rate-limit/malformed/error states, and deterministic test-fixture scenarios kept out of the signed-in product flow.
 - **Accessibility:** light/dark mode, Dynamic Type reflow, VoiceOver semantics, native hit targets, and portrait/landscape layouts.
 
 ReviewBar has no customer-review mutation operations and never replies to, edits, or deletes reviews.
@@ -53,7 +53,7 @@ Key directories:
 - `ReviewBar/Services`: networking, JWT, Keychain, repositories, persistence, TSV/gzip, icon cache, and optional relay client.
 - `ReviewBar/Domain`: UI-independent release, build, review, Analytics, platform, and real-time models.
 - `ReviewBar/UI`: feature-oriented SwiftUI screens.
-- `ReviewBar/Fixtures`: deterministic multi-platform demo scenarios.
+- `ReviewBar/Fixtures`: deterministic multi-platform previews and test scenarios that never ship as a signed-in product mode.
 - `NotificationRelay`: isolated Cloudflare Worker, D1 migration, queue/APNs adapter, and runtime tests.
 - `ReviewBarTests` / `ReviewBarUITests`: unit, integration, and primary-flow coverage.
 - `Documentation`: verified API decisions and security threat model.
@@ -81,7 +81,7 @@ xcodebuild -project ReviewBar.xcodeproj -scheme ReviewBar \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' test
 ```
 
-Run without credentials and choose **Explore with Local Sample Data**. Production mode never activates fixtures implicitly.
+Run the simulator tests to exercise the signed-out, empty-account, unavailable-service, and multi-platform fixture scenarios. Fixtures are injected only by `#if DEBUG` UI-test launch arguments; production builds never activate them implicitly.
 
 Relay validation is independent:
 

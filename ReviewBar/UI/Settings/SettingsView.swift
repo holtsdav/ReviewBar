@@ -15,7 +15,6 @@ struct SettingsView: View {
                 accountSection
                 dataSection
                 notificationsSection
-                developerSection
                 privacySection
                 aboutSection
             }
@@ -30,7 +29,7 @@ struct SettingsView: View {
             .refreshable { await updateCacheSize() }
             .confirmationDialog(disconnectTitle, isPresented: $confirmingDisconnect, titleVisibility: .visible) {
                 Button(disconnectActionTitle, role: .destructive) {
-                    Task { await disconnectOrExitDemo() }
+                    Task { await disconnectConnection() }
                 }
                 Button("Cancel", role: .cancel) {}
             }
@@ -54,7 +53,7 @@ struct SettingsView: View {
         Section("Account") {
             SettingsValueRow(
                 title: "App Store Connect",
-                value: model.source == .demo ? "Demo Account" : "Connected",
+                value: "Connected",
                 symbol: "person.crop.circle"
             )
             Button("Manage Connection", systemImage: "key") {
@@ -67,7 +66,7 @@ struct SettingsView: View {
         Section("Data") {
             SettingsValueRow(
                 title: "Data Source",
-                value: model.source == .demo ? "Local Demo" : "Live",
+                value: "Live",
                 symbol: "externaldrive"
             )
             SettingsValueRow(
@@ -113,25 +112,6 @@ struct SettingsView: View {
         }
     }
 
-    private var developerSection: some View {
-        Section("Developer") {
-            SettingsValueRow(
-                title: "Demo Mode",
-                value: model.source == .demo ? "On" : "Off",
-                symbol: "hammer"
-            )
-            Button(model.source == .demo ? "Exit Demo Mode" : "Enter Demo Mode", systemImage: "sparkles") {
-                Task {
-                    if model.source == .demo {
-                        await model.exitDemo()
-                    } else {
-                        await model.enterDemo()
-                    }
-                }
-            }
-        }
-    }
-
     private var privacySection: some View {
         Section("Data & Privacy") {
             NavigationLink {
@@ -160,7 +140,7 @@ struct SettingsView: View {
         InformationSheet(
             title: "Credential Security",
             sections: [
-                ("On this device", "The imported private key and its identifiers use an iOS Keychain this-device-only protection class. They never enter UserDefaults, dashboard caches, demo fixtures, or notification relay requests."),
+                ("On this device", "The imported private key and its identifiers use an iOS Keychain this-device-only protection class. They never enter UserDefaults, dashboard caches, or notification relay requests."),
                 ("Direct Apple requests", "ReviewBar creates short-lived ES256 tokens in memory. The iPhone talks directly to App Store Connect, including user-initiated Analytics report and webhook configuration requests."),
                 ("Notification relay", "If real-time updates are enabled, the relay receives Apple webhook events and sends ReviewBar push notifications. It never receives your App Store Connect private key, issuer ID, or JWT."),
                 ("Your original file", "ReviewBar cannot delete or protect the original .p8 file in Files. Keep that copy secure, and revoke the key in App Store Connect if you believe it has been exposed.")
@@ -182,11 +162,11 @@ struct SettingsView: View {
     }
 
     private var disconnectTitle: String {
-        model.source == .demo ? "Exit the local demo?" : "Remove this App Store Connect connection?"
+        "Remove this App Store Connect connection?"
     }
 
     private var disconnectActionTitle: String {
-        model.source == .demo ? "Exit Demo" : "Remove Connection"
+        "Remove Connection"
     }
 
     private var cacheDescription: String {
@@ -195,7 +175,6 @@ struct SettingsView: View {
     }
 
     private var realtimeStatus: String {
-        if model.source == .demo { return "Unavailable" }
         guard model.realtimeRelayIsConfigured else { return "Unavailable" }
         let count = model.realtimeInstallation?.channels.count ?? 0
         return count == 0 ? "Off" : "\(count) \(count == 1 ? "App" : "Apps")"
@@ -205,11 +184,8 @@ struct SettingsView: View {
         cacheSize = await model.cachedDataSizeInBytes()
     }
 
-    private func disconnectOrExitDemo() async {
-        if model.source == .demo {
-            await model.exitDemo()
-            if model.session == .signedOut { dismiss() }
-        } else if await model.disconnect() {
+    private func disconnectConnection() async {
+        if await model.disconnect() {
             dismiss()
         }
     }

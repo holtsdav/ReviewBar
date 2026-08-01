@@ -2,74 +2,89 @@ import SwiftUI
 
 struct ReviewsView: View {
     let model: AppModel
-    let dashboard: AppDashboard?
-    @Binding var selectedAppID: String?
+    @State private var selectedReviewAppID: String?
     @State private var filter = ReviewFilter()
     @State private var showingFilters = false
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         Group {
-            if let dashboard {
-                let filtered = filter.apply(to: dashboard.reviews)
+            if model.dashboards.isEmpty {
+                ChooseAppView()
+            } else {
+                let reviews = scopedDashboards.flatMap(\.reviews)
+                let filtered = filteredEntries
                 List {
-                    SelectedAppHeader(name: dashboard.app.name)
-                    if model.showingCachedData {
-                        DataStatusBanner(lastUpdated: model.lastUpdated, issue: model.lastRefreshIssue)
-                    }
+                Section {
+                    AppSelectionPicker(
+                        dashboards: model.dashboards,
+                        selection: $selectedReviewAppID,
+                        includesAllApps: true
+                    )
+                    .accessibilityLabel("Reviews app")
+                    .accessibilityValue(selectedReviewAppID.flatMap { id in model.dashboards.first(where: { $0.id == id })?.app.name } ?? "All Apps")
+                } header: {
+                    Text("App")
+                }
+
+                if model.showingCachedData {
+                    DataStatusBanner(lastUpdated: model.lastUpdated, issue: model.lastRefreshIssue)
+                }
+
+                ForEach(scopedDashboards.filter { $0.sectionIssues[.reviews] != nil }) { dashboard in
                     if let issue = dashboard.sectionIssues[.reviews] {
                         Section {
                             SectionIssueView(issue: issue) { Task { await model.refresh() } }
+                        } header: {
+                            Text(dashboard.app.name)
                         }
                     }
-                    if filtered.isEmpty, dashboard.sectionIssues[.reviews] == nil || !dashboard.reviews.isEmpty {
-                        ContentUnavailableView {
-                            Label(dashboard.reviews.isEmpty ? "No Reviews" : "No Matching Reviews", systemImage: "star.bubble")
-                        } description: {
-                            Text(dashboard.reviews.isEmpty
-                                 ? "This app has no customer reviews available."
-                                 : "Try clearing or changing the active filters.")
-                        } actions: {
-                            if !dashboard.reviews.isEmpty {
-                                Button("Clear Filters") { filter = ReviewFilter() }
-                            }
-                            if dashboard.nextReviewsPage != nil {
-                                Button("Load More Reviews") {
-                                    Task { await model.loadMoreReviews(appID: dashboard.id) }
-                                }
-                            }
-                        }
-                    } else {
-                        Section {
-                            ForEach(filtered) { review in
-                                NavigationLink(value: review) {
-                                    ReviewRow(
-                                        review: review,
-                                        isUnread: model.unreadReviewIDs.contains(review.id)
-                                    )
-                                }
-                            }
+                }
 
-                            if model.isLoadingMoreReviews {
-                                HStack {
-                                    Spacer()
-                                    ProgressView("Loading more reviews…")
-                                    Spacer()
-                                }
-                            } else if dashboard.nextReviewsPage != nil {
-                                Button("Load More Reviews") {
-                                    Task { await model.loadMoreReviews(appID: dashboard.id) }
-                                }
-                                .frame(maxWidth: .infinity)
-                            }
-                        } footer: {
-                            if dashboard.nextReviewsPage != nil && filter != ReviewFilter() {
-                                Text("Filters currently apply to loaded reviews. Load all pages for a complete result.")
-                            } else {
-                                Text("Unread status is stored only on this device.")
-                            }
+                if filtered.isEmpty {
+                    ContentUnavailableView {
+                        Label(reviews.isEmpty ? "No Reviews" : "No Matching Reviews", systemImage: "star.bubble")
+                    } description: {
+                        Text(reviews.isEmpty
+                             ? "No customer reviews are available across the selected apps."
+                             : "Try clearing or changing the active filters.")
+                    } actions: {
+                        if !reviews.isEmpty {
+                            Button("Clear Filters") { filter = ReviewFilter() }
+                        }
+                        if hasMoreReviews {
+                            Button("Load More Reviews") { loadMoreReviews() }
                         }
                     }
+                } else {
+                    Section {
+                        ForEach(filtered) { entry in
+                            NavigationLink(value: entry.review) {
+                                ReviewRow(
+                                    review: entry.review,
+                                    appName: selectedReviewAppID == nil ? entry.appName : nil,
+                                    isUnread: model.unreadReviewIDs.contains(entry.review.id)
+                                )
+                            }
+                        }
+
+                        if model.isLoadingMoreReviews {
+                            HStack {
+                                Spacer()
+                                ProgressView("Loading more reviews…")
+                                Spacer()
+                            }
+                        } else if hasMoreReviews {
+                            Button("Load More Reviews") { loadMoreReviews() }
+                                .frame(maxWidth: .infinity)
+                        }
+                    } footer: {
+                        if hasMoreReviews && filter != ReviewFilter() {
+                            Text("Filters currently apply to loaded reviews. Load all pages for a complete result.")
+                        } else {
+                            Text("Showing reviews from \(selectedReviewAppID == nil ? "all apps" : "this app"). Unread status is stored only on this device.")
+                        }
+                    }
+                }
                 }
                 .refreshable { await model.refresh() }
                 .navigationDestination(for: CustomerReview.self) { review in
@@ -77,16 +92,16 @@ struct ReviewsView: View {
                 }
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) {
-                        if !dashboard.reviews.isEmpty {
+                        if !reviews.isEmpty {
                             Menu("Review actions", systemImage: "ellipsis.circle") {
                                 Picker("Sort", selection: $filter.sort) {
                                     ForEach(ReviewFilter.Sort.allCases, id: \.self) { sort in
                                         Text(sort.title).tag(sort)
                                     }
                                 }
-                                if dashboard.reviews.contains(where: { model.unreadReviewIDs.contains($0.id) }) {
+                                if filtered.contains(where: { model.unreadReviewIDs.contains($0.review.id) }) {
                                     Button("Mark All as Read", systemImage: "checkmark.circle") {
-                                        Task { await model.markAllRead(in: dashboard) }
+                                        Task { await markAllRead() }
                                     }
                                 }
                             }
@@ -97,20 +112,66 @@ struct ReviewsView: View {
                     }
                 }
                 .sheet(isPresented: $showingFilters) {
-                    ReviewFilterView(filter: $filter, reviews: dashboard.reviews)
+                    ReviewFilterView(filter: $filter, reviews: reviews)
                 }
-            } else {
-                ChooseAppView()
+                .onChange(of: model.dashboards.map(\.id), initial: true) { _, ids in
+                    if let selectedReviewAppID, !ids.contains(selectedReviewAppID) {
+                        self.selectedReviewAppID = nil
+                    }
+                }
             }
         }
         .navigationTitle("Reviews")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { AppContextToolbar(dashboards: model.dashboards, selectedAppID: $selectedAppID) }
+    }
+
+    private struct ReviewEntry: Identifiable {
+        let review: CustomerReview
+        let appName: String
+        var id: String { review.id }
+    }
+
+    private var scopedDashboards: [AppDashboard] {
+        guard let selectedReviewAppID else { return model.dashboards }
+        return model.dashboards.filter { $0.id == selectedReviewAppID }
+    }
+
+    private var filteredEntries: [ReviewEntry] {
+        let entries = scopedDashboards.flatMap { dashboard in
+            dashboard.reviews.map { ReviewEntry(review: $0, appName: dashboard.app.name) }
+        }
+        let filteredIDs = Set(filter.apply(to: entries.map(\.review)).map(\.id))
+        return entries
+            .filter { filteredIDs.contains($0.review.id) }
+            .sorted {
+                filter.sort == .newest
+                    ? $0.review.createdDate > $1.review.createdDate
+                    : $0.review.createdDate < $1.review.createdDate
+            }
+    }
+
+    private var hasMoreReviews: Bool {
+        scopedDashboards.contains { $0.nextReviewsPage != nil }
+    }
+
+    private func loadMoreReviews() {
+        Task {
+            for dashboard in scopedDashboards where dashboard.nextReviewsPage != nil {
+                await model.loadMoreReviews(appID: dashboard.id)
+            }
+        }
+    }
+
+    private func markAllRead() async {
+        for dashboard in scopedDashboards {
+            await model.markAllRead(in: dashboard)
+        }
     }
 }
 
 private struct ReviewRow: View {
     let review: CustomerReview
+    let appName: String?
     let isUnread: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -149,6 +210,11 @@ private struct ReviewRow: View {
     }
 
     @ViewBuilder private var rowMetadata: some View {
+                if let appName {
+                    Text(appName)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                }
                 StarRatingView(rating: review.rating)
                 if isUnread {
                     Label("New", systemImage: "circle.fill")

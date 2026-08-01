@@ -16,7 +16,7 @@ struct RealTimeStatusSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if model.realtimeRelayIsConfigured, model.source == .live {
+            if model.realtimeRelayIsConfigured {
                 Section("Apps") {
                     if model.dashboards.isEmpty {
                         Text("Your apps will appear here after the next refresh.")

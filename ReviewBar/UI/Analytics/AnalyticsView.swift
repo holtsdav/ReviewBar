@@ -10,9 +10,15 @@ struct AnalyticsView: View {
 
     var body: some View {
         Group {
-            if let dashboard {
+            if let dashboard = activeDashboard {
                 List {
-                    SelectedAppHeader(name: dashboard.app.name)
+                    Section {
+                        AppSelectionPicker(dashboards: model.dashboards, selection: $selectedAppID)
+                        .accessibilityLabel("Analytics app")
+                        .accessibilityValue(dashboard.app.name)
+                    } header: {
+                        Text("App")
+                    }
                     Section {
                         Picker("Time Range", selection: $range) {
                             ForEach(AnalyticsRange.allCases) { range in
@@ -38,13 +44,26 @@ struct AnalyticsView: View {
         .navigationTitle("Analytics")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            AppContextToolbar(dashboards: model.dashboards, selectedAppID: $selectedAppID)
             ToolbarItem(placement: .topBarTrailing) {
                 Button("About Analytics", systemImage: "info.circle") { showingMethodology = true }
             }
         }
         .sheet(isPresented: $showingMethodology) { AnalyticsMethodologyView() }
+        .onChange(of: model.dashboards.map(\.id), initial: true) { _, ids in
+            if selectedAppID == nil || !ids.contains(selectedAppID ?? "") {
+                selectedAppID = ids.first
+            }
+        }
     }
+
+    private var activeDashboard: AppDashboard? {
+        if let selectedAppID,
+           let dashboard = model.dashboards.first(where: { $0.id == selectedAppID }) {
+            return dashboard
+        }
+        return dashboard ?? model.dashboards.first
+    }
+
 
     @ViewBuilder
     private func stateContent(_ state: AnalyticsLoadState, appID: String) -> some View {

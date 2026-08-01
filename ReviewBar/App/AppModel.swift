@@ -10,13 +10,7 @@ final class AppModel {
         case ready
     }
 
-    enum Source: Equatable {
-        case live
-        case demo
-    }
-
     private(set) var session: Session
-    private(set) var source: Source = .live
     private(set) var dashboards: [AppDashboard] = []
     private(set) var unreadReviewIDs: Set<String> = []
     private(set) var isRefreshing = false
@@ -97,7 +91,6 @@ final class AppModel {
             historyStore: ReleaseHistoryStore(),
             readStore: ReviewReadStore(initiallyReadIDs: ["review-g-2", "review-g-3", "review-t-1"])
         )
-        model.source = .demo
         model.dashboards = DemoFixtures.dashboards
         model.lastUpdated = DemoFixtures.referenceDate
         model.unreadReviewIDs = ["review-g-1"]
@@ -160,8 +153,8 @@ final class AppModel {
             return
         }
 
-        if ProcessInfo.processInfo.arguments.contains("-ui-testing-demo") {
-            await enterDemo(persist: false)
+        if ProcessInfo.processInfo.arguments.contains("-ui-testing-fixture") {
+            await loadUITestFixture()
             if let appID = dashboards.first?.id {
                 if ProcessInfo.processInfo.arguments.contains("-ui-testing-analytics-permission") {
                     analyticsStates[appID] = .permissionRequired(
@@ -171,7 +164,7 @@ final class AppModel {
                 } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-analytics-empty") {
                     analyticsStates[appID] = .available(AnalyticsDataset(
                         appID: appID,
-                        requestID: "empty-demo",
+                        requestID: "empty-fixture",
                         accessType: "ONGOING",
                         series: [],
                         fetchedAt: .now,
@@ -182,12 +175,11 @@ final class AppModel {
             return
         }
         if ProcessInfo.processInfo.arguments.contains("-ui-testing-empty") {
-            await enterDemo(persist: false, scenario: .empty)
+            await loadUITestFixture(scenario: .empty)
             return
         }
         if ProcessInfo.processInfo.arguments.contains("-ui-testing-error") {
-            await enterDemo(
-                persist: false,
+            await loadUITestFixture(
                 scenario: .failure(AppError(
                     kind: .appleUnavailable,
                     message: "App Store Connect is temporarily unavailable."
@@ -197,10 +189,9 @@ final class AppModel {
         }
         #endif
 
-        if UserDefaults.standard.bool(forKey: "ReviewBar.demoMode") {
-            await enterDemo(persist: false)
-            return
-        }
+        // Remove the legacy local-data flag so upgraded installs always use
+        // the authenticated App Store Connect path.
+        UserDefaults.standard.removeObject(forKey: "ReviewBar.demoMode")
 
         do {
             guard let credential = try await credentialStore.load() else {
@@ -231,8 +222,6 @@ final class AppModel {
             guard let repository else { return }
             let collection = try await repository.refresh()
             try await credentialStore.save(credential)
-            UserDefaults.standard.set(false, forKey: "ReviewBar.demoMode")
-            source = .live
             session = .ready
             lastRefreshIssue = nil
             await apply(collection, cached: false)
@@ -250,12 +239,13 @@ final class AppModel {
         }
     }
 
-    func enterDemo(persist: Bool = true, scenario: DemoDataProvider.Scenario = .standard) async {
+    #if DEBUG
+    private func loadUITestFixture(scenario: DemoDataProvider.Scenario = .standard) async {
         guard !realtimeTeardownInProgress else { return }
         realtimeTeardownInProgress = true
         defer { realtimeTeardownInProgress = false }
-        // A completed disable is safer than cancelling between Apple's DELETE
-        // and relay/local persistence. Demo Mode preserves the live connection.
+        // UI fixtures are ephemeral and never persisted. They are available
+        // only to automated tests and SwiftUI previews, not to product users.
         await waitForRealtimeOperation()
         sessionGeneration += 1
         realtimeRevision += 1
@@ -265,26 +255,24 @@ final class AppModel {
         operationID = nil
         isRefreshing = false
         isLoadingMoreReviews = false
-        let demoHistoryStore = ReleaseHistoryStore()
-        let demoReadStore = ReviewReadStore()
-        let demoAnalyticsCache = MemoryAnalyticsCache()
-        historyStore = demoHistoryStore
-        readStore = demoReadStore
-        analyticsCache = demoAnalyticsCache
-        let demoCache = MemorySnapshotCache(collection: DashboardCollection(
+        let fixtureHistoryStore = ReleaseHistoryStore()
+        let fixtureReadStore = ReviewReadStore()
+        let fixtureAnalyticsCache = MemoryAnalyticsCache()
+        historyStore = fixtureHistoryStore
+        readStore = fixtureReadStore
+        analyticsCache = fixtureAnalyticsCache
+        let fixtureCache = MemorySnapshotCache(collection: DashboardCollection(
             dashboards: scenario.isStandard ? DemoFixtures.dashboards : [],
             fetchedAt: .now
         ))
         repository = DashboardRepository(
             provider: DemoDataProvider(scenario: scenario),
-            cache: demoCache,
-            historyStore: demoHistoryStore,
-            readStore: demoReadStore
+            cache: fixtureCache,
+            historyStore: fixtureHistoryStore,
+            readStore: fixtureReadStore
         )
-        analyticsRepository = AnalyticsRepository(provider: DemoAnalyticsProvider(), cache: demoAnalyticsCache)
-        if persist { UserDefaults.standard.set(true, forKey: "ReviewBar.demoMode") }
-        source = .demo
-        realtimeSetupState = .unavailable("Real-time updates are unavailable while Demo Mode is active.")
+        analyticsRepository = AnalyticsRepository(provider: DemoAnalyticsProvider(), cache: fixtureAnalyticsCache)
+        realtimeSetupState = .unavailable("Real-time updates are unavailable for local test fixtures.")
         session = .ready
         dashboards = scenario.isStandard ? DemoFixtures.dashboards : []
         lastUpdated = .now
@@ -294,7 +282,7 @@ final class AppModel {
         if scenario.isStandard {
             for dashboard in DemoFixtures.dashboards {
                 let dataset = DemoFixtures.analytics(appID: dashboard.id)
-                await demoAnalyticsCache.save(dataset)
+                await fixtureAnalyticsCache.save(dataset)
                 analyticsStates[dashboard.id] = .available(dataset)
             }
         }
@@ -304,7 +292,7 @@ final class AppModel {
         }
         let allReviewIDs = Set(DemoFixtures.dashboards.flatMap(\.reviews).map(\.id))
         do {
-            try await readStore.configureDemo(
+            try await readStore.configureFixture(
                 appIDs: Set(DemoFixtures.dashboards.map(\.id)),
                 readReviewIDs: allReviewIDs.subtracting(["review-g-1"])
             )
@@ -316,6 +304,7 @@ final class AppModel {
         }
         await updateUnreadState()
     }
+    #endif
 
     var realtimeRelayIsConfigured: Bool { effectiveRealtimeRelayURL != nil }
 
@@ -341,10 +330,6 @@ final class AppModel {
     }
 
     private func performPrepareRealtimeState() async {
-        guard source != .demo else {
-            realtimeSetupState = .unavailable("Real-time updates are unavailable while Demo Mode is active.")
-            return
-        }
         do {
             var saved = try await realtimeStateStore.load()
             if saved?.relayBaseURL == nil, let baseURL = relayConfiguration.baseURL {
@@ -396,12 +381,12 @@ final class AppModel {
         ]
     ) async {
         guard !realtimeTeardownInProgress, realtimeOperationTask == nil,
-              source == .live, session == .ready else { return }
+              session == .ready else { return }
         if realtimeInstallation?.pendingCleanup.contains(where: { $0.appID == appID }) == true {
             await prepareRealtimeState()
         }
         guard !realtimeTeardownInProgress, realtimeOperationTask == nil,
-              !realtimeIsEnabled(appID: appID), source == .live,
+              !realtimeIsEnabled(appID: appID),
               session == .ready,
               realtimeInstallation?.pendingCleanup.contains(where: { $0.appID == appID }) != true,
               !eventTypes.isEmpty, effectiveRealtimeRelayURL != nil else { return }
@@ -601,7 +586,7 @@ final class AppModel {
 
     func disableRealtime(appID: String) async {
         guard !realtimeTeardownInProgress, realtimeOperationTask == nil,
-              source == .live, session == .ready,
+              session == .ready,
               realtimeInstallation?.channels.contains(where: { $0.appID == appID }) == true else { return }
         let identifier = UUID()
         let generation = sessionGeneration
@@ -671,7 +656,7 @@ final class AppModel {
 
     func syncRealtimeEvents() async {
         guard !realtimeTeardownInProgress, realtimeOperationTask == nil,
-              source == .live, session == .ready, realtimeInstallation != nil else { return }
+              session == .ready, realtimeInstallation != nil else { return }
         let identifier = UUID()
         let generation = sessionGeneration
         let revision = realtimeRevision
@@ -746,8 +731,7 @@ final class AppModel {
     private func validateRealtimeOperation(generation: Int, revision: Int) throws {
         try Task.checkCancellation()
         guard generation == sessionGeneration,
-              revision == realtimeRevision,
-              source == .live else { throw CancellationError() }
+              revision == realtimeRevision else { throw CancellationError() }
     }
 
     private func waitForRealtimeOperation() async {
@@ -768,7 +752,7 @@ final class AppModel {
         webhookID: String? = nil
     ) async {
         // Compensation must run in a fresh task: the setup task is commonly
-        // cancelled by disconnect/demo transitions, and URLSession correctly
+        // cancelled by disconnect transitions, and URLSession correctly
         // refuses new work from an already-cancelled task.
         await Task.detached(priority: .utility) {
             if let apple, let webhookID { try? await apple.delete(webhookID: webhookID) }
@@ -872,13 +856,12 @@ final class AppModel {
     private func refreshRealtimeDeviceToken(for installation: RealtimeInstallation) async {
         do {
             let token = try await PushRegistrationCenter.shared.registerForDeviceToken().lowercaseHexString
-            guard source == .live,
-                  realtimeInstallation?.id == installation.id,
+            guard realtimeInstallation?.id == installation.id,
                   let baseURL = installation.relayBaseURL ?? relayConfiguration.baseURL else { return }
             let relay = try NotificationRelayClient(baseURL: baseURL)
             try await relay.rotateDeviceToken(token, environment: Self.apnsEnvironment, installation: installation)
         } catch {
-            guard source == .live, realtimeInstallation?.id == installation.id else { return }
+            guard realtimeInstallation?.id == installation.id else { return }
             realtimeSetupState = .failed("ReviewBar couldn't refresh this device's push registration. Open Real-Time Updates to try again.")
         }
     }
@@ -1120,10 +1103,6 @@ final class AppModel {
     @discardableResult
     func disconnect() async -> Bool {
         guard !realtimeTeardownInProgress else { return false }
-        if source == .demo {
-            await exitDemo()
-            return true
-        }
         realtimeTeardownInProgress = true
         defer { realtimeTeardownInProgress = false }
         await waitForRealtimeOperation()
@@ -1177,14 +1156,12 @@ final class AppModel {
         let cleanupSucceeded = await clearLiveLocalData() && analyticsCleanupSucceeded
         UserDefaults.standard.set(!cleanupSucceeded, forKey: "ReviewBar.pendingLocalCleanup")
 
-        UserDefaults.standard.set(false, forKey: "ReviewBar.demoMode")
         dashboards = []
         analyticsStates = [:]
         unreadReviewIDs = []
         lastUpdated = nil
         showingCachedData = false
         lastRefreshIssue = nil
-        source = .live
         session = .signedOut
         realtimeInstallation = nil
         realtimeSetupState = relayConfiguration.baseURL == nil
@@ -1202,51 +1179,6 @@ final class AppModel {
             )
         }
         return true
-    }
-
-    func exitDemo() async {
-        guard !realtimeTeardownInProgress else { return }
-        realtimeTeardownInProgress = true
-        defer { realtimeTeardownInProgress = false }
-        await waitForRealtimeOperation()
-        sessionGeneration += 1
-        realtimeRevision += 1
-        if let analyticsRepository { await analyticsRepository.cancelInFlight() }
-        let pendingTask = dataTask
-        pendingTask?.cancel()
-        dataTask = nil
-        operationID = nil
-        isRefreshing = false
-        isLoadingMoreReviews = false
-        if let pendingTask { _ = try? await pendingTask.value }
-
-        UserDefaults.standard.set(false, forKey: "ReviewBar.demoMode")
-        repository = nil
-        analyticsRepository = nil
-        dashboards = []
-        analyticsStates = [:]
-        unreadReviewIDs = []
-        lastUpdated = nil
-        showingCachedData = false
-        lastRefreshIssue = nil
-        source = .live
-        historyStore = liveHistoryStore
-        readStore = liveReadStore
-        analyticsCache = liveAnalyticsCache
-        await prepareRealtimeState(allowDuringTeardown: true)
-
-        do {
-            guard let credential = try await credentialStore.load() else {
-                session = .signedOut
-                return
-            }
-            try await configureLiveRepository(credential: credential)
-            session = .ready
-            await loadCachedThenRefresh()
-        } catch {
-            session = .signedOut
-            presentedError = AppError.map(error)
-        }
     }
 
     private func loadCachedThenRefresh() async {

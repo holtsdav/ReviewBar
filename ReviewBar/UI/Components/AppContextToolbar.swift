@@ -31,6 +31,37 @@ struct AppContextToolbar: ToolbarContent {
     }
 }
 
+struct AppSelectionPicker: View {
+    let dashboards: [AppDashboard]
+    @Binding var selection: String?
+    let includesAllApps: Bool
+
+    init(dashboards: [AppDashboard], selection: Binding<String?>, includesAllApps: Bool = false) {
+        self.dashboards = dashboards
+        _selection = selection
+        self.includesAllApps = includesAllApps
+    }
+
+    var body: some View {
+        Picker("App", selection: selectedApp) {
+            if includesAllApps {
+                Text("All Apps").tag("")
+            }
+            ForEach(dashboards) { dashboard in
+                Text(verbatim: dashboard.app.name).tag(dashboard.id)
+            }
+        }
+        .pickerStyle(.menu)
+    }
+
+    private var selectedApp: Binding<String> {
+        Binding(
+            get: { selection ?? (includesAllApps ? "" : dashboards.first?.id ?? "") },
+            set: { selection = $0.isEmpty ? nil : $0 }
+        )
+    }
+}
+
 struct SelectedAppHeader: View {
     let name: String
 

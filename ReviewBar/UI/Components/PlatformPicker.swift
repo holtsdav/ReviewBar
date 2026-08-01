@@ -25,8 +25,7 @@ struct PlatformPicker: View {
                 .accessibilityValue(selection?.label ?? "Not selected")
             }
         } else if let platform = platforms.first {
-            Label(platform.label, systemImage: platform.symbol)
-                .labelStyle(.titleAndIcon)
+            PlatformLabel(platform: platform)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
         }
@@ -34,8 +33,22 @@ struct PlatformPicker: View {
 
     @ViewBuilder private var platformOptions: some View {
         ForEach(platforms, id: \.self) { platform in
-            Label(platform.label, systemImage: platform.symbol)
+            PlatformLabel(platform: platform)
                 .tag(Optional(platform))
         }
+    }
+}
+
+struct PlatformLabel: View {
+    let platform: AppRelease.Platform
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: platform.symbol)
+                .imageScale(.small)
+            Text(platform.label)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(platform.label)
     }
 }

@@ -5,8 +5,8 @@ import Testing
 
 @MainActor
 struct AppModelTests {
-    @Test("Demo mode leaves live cache, unread state, and release history untouched")
-    func demoStorageIsolation() async throws {
+    @Test("Preview fixture data is isolated from live stores")
+    func previewDataIsolation() async throws {
         let liveReads = ReviewReadStore()
         let liveHistory = ReleaseHistoryStore()
         let firstReview = DemoFixtures.dashboards[0].reviews[0]
@@ -24,14 +24,11 @@ struct AppModelTests {
             readStore: liveReads
         )
 
-        await model.enterDemo(persist: false)
-        #expect(model.source == .demo)
+        let preview = AppModel.preview()
+        #expect(preview.dashboards == DemoFixtures.dashboards)
         #expect(await liveCache.load() == sentinel)
         #expect(await liveReads.unreadCount(in: DemoFixtures.dashboards[0].reviews) == 2)
         #expect(await liveHistory.observations(for: DemoFixtures.dashboards[0].releases[0].id).isEmpty)
-
-        await model.exitDemo()
-        #expect(model.source == .live)
         #expect(model.session == .signedOut)
         #expect(await liveCache.load() == sentinel)
     }

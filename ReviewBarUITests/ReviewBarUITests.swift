@@ -2,8 +2,8 @@ import XCTest
 
 final class ReviewBarUITests: XCTestCase {
     @MainActor
-    func testDemoDashboardNavigation() throws {
-        let app = launch(["-ui-testing-demo"])
+    func testFixtureDashboardNavigation() throws {
+        let app = launch(["-ui-testing-fixture"])
         defer {
             XCUIDevice.shared.orientation = .portrait
             app.terminate()
@@ -12,14 +12,18 @@ final class ReviewBarUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Apps"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Glassdays"].waitForExistence(timeout: 3))
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Glassdays")).firstMatch.tap()
-        XCTAssertTrue(app.tabBars.buttons["Overview"].isSelected)
+        XCTAssertTrue(app.navigationBars["Overview"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.tabBars.buttons["Overview"].exists)
         XCTAssertTrue(app.staticTexts["Version 1.4"].waitForExistence(timeout: 3))
 
         app.tabBars.buttons["Reviews"].tap()
         XCTAssertTrue(app.navigationBars["Reviews"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["All Apps"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["Exactly what I wanted"].exists)
+        XCTAssertTrue(app.staticTexts["Sync needs work"].exists)
 
-        app.tabBars.buttons["Overview"].tap()
+        app.tabBars.buttons["Apps"].tap()
+        XCTAssertTrue(app.navigationBars["Overview"].waitForExistence(timeout: 3))
         let builds = app.buttons["overview-builds"]
         if !builds.isHittable { app.swipeUp() }
         XCTAssertTrue(builds.waitForExistence(timeout: 3))
@@ -42,6 +46,7 @@ final class ReviewBarUITests: XCTestCase {
         app.staticTexts["Analytics Snapshot · All Platforms"].swipeUp()
         app.buttons["View Analytics"].tap()
         XCTAssertTrue(app.navigationBars["Analytics"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Glassdays"].exists)
         XCTAssertTrue(app.staticTexts["Downloads Trend"].waitForExistence(timeout: 3))
     }
 
@@ -51,7 +56,6 @@ final class ReviewBarUITests: XCTestCase {
         defer { app.terminate() }
 
         XCTAssertTrue(app.buttons["Connect to App Store Connect"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Explore with Local Sample Data"].exists)
     }
 
     @MainActor
@@ -66,7 +70,7 @@ final class ReviewBarUITests: XCTestCase {
     @MainActor
     func testDarkModeAtAccessibilityTextSize() throws {
         let app = launch([
-            "-ui-testing-demo",
+            "-ui-testing-fixture",
             "-ui-testing-dark",
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
         ])
@@ -92,7 +96,7 @@ final class ReviewBarUITests: XCTestCase {
 
     @MainActor
     func testAnalyticsPermissionAndEmptyStates() throws {
-        let permissionApp = launch(["-ui-testing-demo", "-ui-testing-analytics-permission"])
+        let permissionApp = launch(["-ui-testing-fixture", "-ui-testing-analytics-permission"])
         XCTAssertTrue(permissionApp.staticTexts["Glassdays"].waitForExistence(timeout: 5))
         permissionApp.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Glassdays")).firstMatch.tap()
         XCTAssertTrue(permissionApp.navigationBars["Overview"].waitForExistence(timeout: 5))
@@ -100,7 +104,7 @@ final class ReviewBarUITests: XCTestCase {
         XCTAssertTrue(permissionApp.staticTexts["Analytics Permission Required"].waitForExistence(timeout: 5))
         permissionApp.terminate()
 
-        let emptyApp = launch(["-ui-testing-demo", "-ui-testing-analytics-empty"])
+        let emptyApp = launch(["-ui-testing-fixture", "-ui-testing-analytics-empty"])
         XCTAssertTrue(emptyApp.staticTexts["Glassdays"].waitForExistence(timeout: 5))
         emptyApp.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Glassdays")).firstMatch.tap()
         XCTAssertTrue(emptyApp.navigationBars["Overview"].waitForExistence(timeout: 5))
@@ -110,8 +114,8 @@ final class ReviewBarUITests: XCTestCase {
     }
 
     @MainActor
-    func testRealTimeSettingsExplainsUnavailableDemoMode() throws {
-        let app = launch(["-ui-testing-demo"])
+    func testRealTimeSettingsExplainsUnavailableFixture() throws {
+        let app = launch(["-ui-testing-fixture"])
         defer { app.terminate() }
 
         XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 5))

@@ -89,8 +89,7 @@ private struct PlatformSummaryRow: View {
 
     @ViewBuilder private var content: some View {
         HStack(spacing: 7) {
-            Label(platform.label, systemImage: platform.symbol)
-                .labelStyle(.titleAndIcon)
+            PlatformLabel(platform: platform)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

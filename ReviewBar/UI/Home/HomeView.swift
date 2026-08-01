@@ -5,7 +5,6 @@ struct HomeView: View {
     @State private var selectedTab: DashboardTab = .apps
     @State private var selectedAppID: String?
     @State private var appsPath = NavigationPath()
-    @State private var overviewPath = NavigationPath()
     @State private var reviewsPath = NavigationPath()
     @State private var analyticsPath = NavigationPath()
 
@@ -22,42 +21,41 @@ struct HomeView: View {
                     selectedAppID: $selectedAppID,
                     onOpenApp: { appID in
                         selectedAppID = appID
-                        overviewPath = NavigationPath()
-                        selectedTab = .overview
+                        appsPath.append(AppsRoute.overview)
                     }
                 )
+                .navigationDestination(for: AppsRoute.self) { route in
+                    switch route {
+                    case .overview:
+                        AppOverviewView(
+                            model: model,
+                            dashboard: selectedDashboard,
+                            selectedAppID: $selectedAppID,
+                            onOpenReviews: {
+                                reviewsPath = NavigationPath()
+                                selectedTab = .reviews
+                            },
+                            onOpenAnalytics: {
+                                analyticsPath = NavigationPath()
+                                selectedTab = .analytics
+                            }
+                        )
+                        .navigationDestination(for: OverviewRoute.self) { route in
+                            switch route {
+                            case .releaseHistory(let platform):
+                                ReleasesView(model: model, dashboard: selectedDashboard, initialPlatform: platform)
+                            case .builds(let platform):
+                                BuildsView(model: model, dashboard: selectedDashboard, initialPlatform: platform)
+                            }
+                        }
+                    }
+                }
             }
             .tabItem { Label("Apps", systemImage: "square.grid.2x2") }
             .tag(DashboardTab.apps)
 
-            NavigationStack(path: $overviewPath) {
-                AppOverviewView(
-                    model: model,
-                    dashboard: selectedDashboard,
-                    selectedAppID: $selectedAppID,
-                    onOpenReviews: {
-                        reviewsPath = NavigationPath()
-                        selectedTab = .reviews
-                    },
-                    onOpenAnalytics: {
-                        analyticsPath = NavigationPath()
-                        selectedTab = .analytics
-                    }
-                )
-                .navigationDestination(for: OverviewRoute.self) { route in
-                    switch route {
-                    case .releaseHistory(let platform):
-                        ReleasesView(model: model, dashboard: selectedDashboard, initialPlatform: platform)
-                    case .builds(let platform):
-                        BuildsView(model: model, dashboard: selectedDashboard, initialPlatform: platform)
-                    }
-                }
-            }
-            .tabItem { Label("Overview", systemImage: "rectangle.grid.1x2") }
-            .tag(DashboardTab.overview)
-
             NavigationStack(path: $reviewsPath) {
-                ReviewsView(model: model, dashboard: selectedDashboard, selectedAppID: $selectedAppID)
+                ReviewsView(model: model)
             }
             .tabItem { Label("Reviews", systemImage: "star.bubble") }
             .badge(unreadCount)
@@ -71,8 +69,6 @@ struct HomeView: View {
         }
         .onChange(of: selectedAppID) { _, newValue in
             UserDefaults.standard.set(newValue, forKey: "ReviewBar.selectedAppID")
-            appsPath = NavigationPath()
-            overviewPath = NavigationPath()
             reviewsPath = NavigationPath()
             analyticsPath = NavigationPath()
         }
@@ -88,16 +84,18 @@ struct HomeView: View {
     }
 
     private var unreadCount: Int {
-        guard let selectedDashboard else { return 0 }
-        return selectedDashboard.reviews.lazy.filter { model.unreadReviewIDs.contains($0.id) }.count
+        model.unreadReviewIDs.count
     }
 }
 
 enum DashboardTab: Hashable {
     case apps
-    case overview
     case reviews
     case analytics
+}
+
+private enum AppsRoute: Hashable {
+    case overview
 }
 
 enum OverviewRoute: Hashable {
@@ -105,6 +103,6 @@ enum OverviewRoute: Hashable {
     case builds(AppRelease.Platform?)
 }
 
-#Preview("Demo Dashboard") {
+#Preview("Dashboard") {
     HomeView(model: .preview())
 }

@@ -41,22 +41,12 @@ struct OnboardingView: View {
                         )
                     }
 
-                    VStack(spacing: 12) {
-                        Button("Connect to App Store Connect") {
-                            showingCredentialForm = true
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                        .frame(maxWidth: .infinity)
-
-                        Button("Explore with Local Sample Data") {
-                            Task { await model.enterDemo() }
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
-                        .frame(maxWidth: .infinity)
-                        .accessibilityHint("Opens ReviewBar with data stored in the app, without connecting to Apple")
+                    Button("Connect to App Store Connect") {
+                        showingCredentialForm = true
                     }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity)
                 }
                 .frame(maxWidth: 560, alignment: .leading)
                 .padding(24)

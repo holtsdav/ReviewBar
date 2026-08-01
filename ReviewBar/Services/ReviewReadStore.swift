@@ -67,11 +67,13 @@ actor ReviewReadStore {
         state = candidate
     }
 
-    func configureDemo(appIDs: Set<String>, readReviewIDs: Set<String>) throws {
+    #if DEBUG
+    func configureFixture(appIDs: Set<String>, readReviewIDs: Set<String>) throws {
         let candidate = State(initializedApps: appIDs, readReviewIDs: readReviewIDs)
         try persist(candidate)
         state = candidate
     }
+    #endif
 
     private func persist(_ candidate: State) throws {
         guard let fileURL else { return }

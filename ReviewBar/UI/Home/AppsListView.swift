@@ -23,9 +23,7 @@ struct AppsListView: View {
                 ContentUnavailableView {
                     Label("No Apps", systemImage: "square.grid.2x2")
                 } description: {
-                    Text(model.source == .demo
-                         ? "This demo scenario has no apps."
-                         : "Apple returned no apps visible to this API key. Check the key’s user and app access.")
+                    Text("Apple returned no apps visible to this API key. Check the key’s user and app access.")
                 } actions: {
                     Button("Refresh") { Task { await model.refresh() } }
                 }
