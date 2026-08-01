@@ -31,6 +31,18 @@ struct PersistenceTests {
         #expect(await store.unreadCount(in: withNew) == 0)
     }
 
+    @Test("Review state is loaded lazily without losing persisted read IDs")
+    func lazyReviewStateLoad() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let url = directory.appending(path: "state.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let review = DemoFixtures.dashboards[0].reviews[0]
+        try await ReviewReadStore(fileURL: url).markRead(review.id)
+
+        let reloaded = ReviewReadStore(fileURL: url)
+        #expect(await reloaded.isUnread(review) == false)
+    }
+
     @Test("Observed release history calculates waiting and review durations")
     func releaseStatistics() async throws {
         let store = ReleaseHistoryStore()
@@ -46,6 +58,18 @@ struct PersistenceTests {
         #expect(stats.averageInReview == 7_200)
         #expect(stats.fastestApproval == 10_800)
         #expect(stats.completedReleaseCount == 1)
+    }
+
+    @Test("Release history is loaded lazily when first accessed")
+    func lazyReleaseHistoryLoad() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let url = directory.appending(path: "history.json")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let release = DemoFixtures.dashboards[0].releases[0]
+        try await ReleaseHistoryStore(fileURL: url).record([release], appID: "app")
+
+        let reloaded = ReleaseHistoryStore(fileURL: url)
+        #expect(await reloaded.observations(for: release.id).count == 1)
     }
 
     @Test("Rejected attempt is excluded while a later contiguous approval is counted")

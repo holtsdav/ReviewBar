@@ -5,12 +5,17 @@ struct AnalyticsView: View {
     let model: AppModel
     let dashboard: AppDashboard?
     @Binding var selectedAppID: String?
+    let isActive: Bool
     @State private var range: AnalyticsRange = .sevenDays
     @State private var showingMethodology = false
 
     var body: some View {
         Group {
-            if let dashboard = activeDashboard {
+            if !isActive {
+                // Keep the tab's navigation shell alive without constructing
+                // charts and metric summaries while it is off-screen.
+                Color.clear.accessibilityHidden(true)
+            } else if let dashboard = activeDashboard {
                 List {
                     Section {
                         AppSelectionPicker(dashboards: model.dashboards, selection: $selectedAppID)
@@ -33,7 +38,8 @@ struct AnalyticsView: View {
                     stateContent(model.analyticsState(for: dashboard.id), appID: dashboard.id)
                 }
                 .refreshable { await model.loadAnalytics(appID: dashboard.id, force: true) }
-                .task(id: dashboard.id) {
+                .task(id: "\(dashboard.id)-\(isActive)") {
+                    guard isActive else { return }
                     await model.prepareAnalytics(appID: dashboard.id)
                     await model.loadAnalytics(appID: dashboard.id)
                 }

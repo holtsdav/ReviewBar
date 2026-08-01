@@ -2,13 +2,18 @@ import SwiftUI
 
 struct ReviewsView: View {
     let model: AppModel
+    let isActive: Bool
     @State private var selectedReviewAppID: String?
     @State private var filter = ReviewFilter()
     @State private var showingFilters = false
 
     var body: some View {
         Group {
-            if model.dashboards.isEmpty {
+            if !isActive {
+                // TabView keeps sibling tabs alive. Avoid rebuilding and
+                // sorting every loaded review while this tab is off-screen.
+                Color.clear.accessibilityHidden(true)
+            } else if model.dashboards.isEmpty {
                 ChooseAppView()
             } else {
                 let reviews = scopedDashboards.flatMap(\.reviews)
@@ -87,9 +92,6 @@ struct ReviewsView: View {
                 }
                 }
                 .refreshable { await model.refresh() }
-                .navigationDestination(for: CustomerReview.self) { review in
-                    ReviewDetailView(model: model, review: review)
-                }
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) {
                         if !reviews.isEmpty {
@@ -114,15 +116,18 @@ struct ReviewsView: View {
                 .sheet(isPresented: $showingFilters) {
                     ReviewFilterView(filter: $filter, reviews: reviews)
                 }
-                .onChange(of: model.dashboards.map(\.id), initial: true) { _, ids in
-                    if let selectedReviewAppID, !ids.contains(selectedReviewAppID) {
-                        self.selectedReviewAppID = nil
-                    }
-                }
             }
         }
         .navigationTitle("Reviews")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(for: CustomerReview.self) { review in
+            ReviewDetailView(model: model, review: review)
+        }
+        .onChange(of: model.dashboards.map(\.id), initial: true) { _, ids in
+            if let selectedReviewAppID, !ids.contains(selectedReviewAppID) {
+                self.selectedReviewAppID = nil
+            }
+        }
     }
 
     private struct ReviewEntry: Identifiable {

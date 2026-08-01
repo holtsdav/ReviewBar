@@ -3,17 +3,16 @@ import Foundation
 actor ReleaseHistoryStore {
     private let fileURL: URL?
     private var observations: [ReleaseObservation]
+    private var hasLoadedPersistedState: Bool
 
     init(fileURL: URL? = nil, observations: [ReleaseObservation] = []) {
         self.fileURL = fileURL
-        if let fileURL,
-           let data = try? Data(contentsOf: fileURL) {
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            self.observations = (try? decoder.decode([ReleaseObservation].self, from: data)) ?? observations
-        } else {
-            self.observations = observations
-        }
+        self.observations = observations
+        // Loading is deliberately lazy. This actor is created while SwiftUI
+        // builds the app scene, so reading a potentially large history file in
+        // init would block the main thread during launch. The first actor
+        // operation loads it on the actor's executor instead.
+        self.hasLoadedPersistedState = fileURL == nil
     }
 
     static func live() -> ReleaseHistoryStore {
@@ -22,6 +21,7 @@ actor ReleaseHistoryStore {
     }
 
     func record(_ releases: [AppRelease], appID: String, at date: Date = .now) throws {
+        loadPersistedStateIfNeeded()
         var candidate = observations
         var changed = false
         for release in releases {
@@ -55,6 +55,7 @@ actor ReleaseHistoryStore {
         occurredAt: Date,
         source: ReleaseObservation.Source
     ) throws {
+        loadPersistedStateIfNeeded()
         guard source != .localObservation,
               !observations.contains(where: { $0.externalEventID == eventID }) else { return }
         var candidate = observations
@@ -73,10 +74,12 @@ actor ReleaseHistoryStore {
     }
 
     func observations(for releaseID: String) -> [ReleaseObservation] {
-        preferredTimeline(observations.filter { $0.releaseID == releaseID })
+        loadPersistedStateIfNeeded()
+        return preferredTimeline(observations.filter { $0.releaseID == releaseID })
     }
 
     func statistics(appID: String) -> ReleaseStatistics {
+        loadPersistedStateIfNeeded()
         let appObservations = observations.filter { $0.appID == appID }
         let grouped = Dictionary(grouping: appObservations, by: \.releaseID)
         var waiting: [TimeInterval] = []
@@ -108,8 +111,21 @@ actor ReleaseHistoryStore {
     }
 
     func clear() throws {
+        loadPersistedStateIfNeeded()
         try persist([])
         observations = []
+    }
+
+    private func loadPersistedStateIfNeeded() {
+        guard !hasLoadedPersistedState else { return }
+        hasLoadedPersistedState = true
+        guard let fileURL,
+              let data = try? Data(contentsOf: fileURL) else { return }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        if let decoded = try? decoder.decode([ReleaseObservation].self, from: data) {
+            observations = decoded
+        }
     }
 
     private func persist(_ candidate: [ReleaseObservation]) throws {

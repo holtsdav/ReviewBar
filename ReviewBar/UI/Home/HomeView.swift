@@ -55,14 +55,19 @@ struct HomeView: View {
             .tag(DashboardTab.apps)
 
             NavigationStack(path: $reviewsPath) {
-                ReviewsView(model: model)
+                ReviewsView(model: model, isActive: selectedTab == .reviews)
             }
             .tabItem { Label("Reviews", systemImage: "star.bubble") }
             .badge(unreadCount)
             .tag(DashboardTab.reviews)
 
             NavigationStack(path: $analyticsPath) {
-                AnalyticsView(model: model, dashboard: selectedDashboard, selectedAppID: $selectedAppID)
+                AnalyticsView(
+                    model: model,
+                    dashboard: selectedDashboard,
+                    selectedAppID: $selectedAppID,
+                    isActive: selectedTab == .analytics
+                )
             }
             .tabItem { Label("Analytics", systemImage: "chart.xyaxis.line") }
             .tag(DashboardTab.analytics)

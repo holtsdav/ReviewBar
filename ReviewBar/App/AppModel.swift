@@ -112,23 +112,16 @@ final class AppModel {
     func start() async {
         guard !hasStarted else { return }
         hasStarted = true
-        var canPrepareRealtimeState = true
         if UserDefaults.standard.bool(forKey: "ReviewBar.pendingRealtimeLocalCleanup") {
             do {
                 try await realtimeStateStore.delete()
                 UserDefaults.standard.set(false, forKey: "ReviewBar.pendingRealtimeLocalCleanup")
             } catch {
-                canPrepareRealtimeState = false
                 presentedError = AppError(
                     kind: .secureStorage,
                     message: "ReviewBar couldn't finish removing an inactive notification registration from Keychain. It will retry next launch."
                 )
             }
-        }
-        if canPrepareRealtimeState {
-            await prepareRealtimeState()
-        } else {
-            realtimeSetupState = .failed("An inactive local notification registration is awaiting secure cleanup.")
         }
 
         if UserDefaults.standard.bool(forKey: "ReviewBar.pendingLocalCleanup") {
