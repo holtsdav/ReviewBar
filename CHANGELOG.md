@@ -7,6 +7,7 @@
 - Added build-number/version search, an explicit app-list refresh action, refresh recency, and clearer empty-state recovery.
 - Updated the tab bar to the modern typed API and improved app-switcher, destructive-action, cache-progress, and lifecycle-refresh accessibility/behavior.
 - Simplified Analytics report importing so its documented sequential memory behavior no longer creates redundant one-child task groups.
+- Kept CPU-heavy Analytics parsing off the repository actor, made review search cancellation cooperative, preserved fractional average ratings, and reset favorites-only filtering when an account is removed.
 - Added preference, attention, and review-workflow regression coverage plus a complete app/relay audit record.
 
 ## 0.1.1 — 2026-08-01

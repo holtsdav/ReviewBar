@@ -22,6 +22,22 @@ struct AppModelTests {
         #expect(restored.appActivityFilter == .needsAttention)
     }
 
+    @Test("Clearing account data exits a favorites-only app filter")
+    func clearingAccountPreferences() {
+        let preferences = AppPreferences(
+            defaults: nil,
+            favoriteAppIDs: ["app-1"],
+            appListSort: .favoritesFirst,
+            appActivityFilter: .favorites
+        )
+
+        preferences.clearAccountScopedData()
+
+        #expect(preferences.favoriteAppIDs.isEmpty)
+        #expect(preferences.appActivityFilter == .all)
+        #expect(preferences.appListSort == .favoritesFirst)
+    }
+
     @Test("Preview fixture data is isolated from live stores")
     func previewDataIsolation() async throws {
         let liveReads = ReviewReadStore()

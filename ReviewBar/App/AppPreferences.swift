@@ -55,6 +55,9 @@ final class AppPreferences {
 
     func clearAccountScopedData() {
         favoriteAppIDs = []
+        if appActivityFilter == .favorites {
+            appActivityFilter = .all
+        }
     }
 
     func resetUITestState() {

@@ -59,6 +59,20 @@ struct DomainTests {
         #expect(filter.activeCriteriaCount == 3)
     }
 
+    @Test("Review filtering cooperatively observes cancellation")
+    func reviewFilteringCancellation() {
+        let reviews = Array(repeating: DemoFixtures.dashboards[0].reviews, count: 100).flatMap { $0 }
+        var cancellationChecks = 0
+
+        #expect(throws: CancellationError.self) {
+            try ReviewFilter().apply(to: reviews) {
+                cancellationChecks += 1
+                if cancellationChecks == 2 { throw CancellationError() }
+            }
+        }
+        #expect(cancellationChecks == 2)
+    }
+
     @Test("Dashboard attention includes failed builds and release failures")
     func dashboardAttention() throws {
         let failedBuildDashboard = try #require(

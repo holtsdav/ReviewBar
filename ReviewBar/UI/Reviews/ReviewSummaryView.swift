@@ -8,9 +8,10 @@ struct ReviewSummaryView: View {
         Section("Loaded Reviews") {
             LabeledContent("Average Rating") {
                 HStack(spacing: 6) {
-                    StarRatingView(rating: Int(averageRating.rounded()))
+                    StarRatingView(rating: averageRating)
                     Text(averageRating, format: .number.precision(.fractionLength(1)))
                         .monospacedDigit()
+                        .accessibilityHidden(true)
                 }
             }
             LabeledContent("Unread", value: reviews.count(where: { unreadIDs.contains($0.id) }).formatted())

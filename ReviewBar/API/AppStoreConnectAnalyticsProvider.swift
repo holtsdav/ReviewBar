@@ -115,6 +115,9 @@ struct AppStoreConnectAnalyticsProvider: AnalyticsDataProviding, Sendable {
         await instanceCache.sizeInBytes()
     }
 
+    /// Report imports remain sequential, but their bounded decompression, TSV
+    /// parsing, and aggregation must not pin the calling repository actor.
+    @concurrent
     private func fetchReport(_ report: AnalyticsReportAPIResource) async throws -> [AnalyticsMetricSeries] {
         let instancesURL = try makeURL(path: "analyticsReports/\(report.id)/instances", query: [
             URLQueryItem(name: "filter[granularity]", value: "DAILY"),

@@ -148,19 +148,26 @@ struct ReviewsView: View {
             guard isActive else { return }
             let key = reviewPreparationKey
             isPreparingReviews = true
-            let entries = await ReviewListPreparer.shared.prepare(
-                dashboards: model.dashboards,
-                selectedAppID: selectedReviewAppID,
-                filter: filter,
-                unreadIDs: model.unreadReviewIDs
-            )
-            guard !Task.isCancelled else {
+            do {
+                if key.filter.query.isEmpty == false {
+                    try await Task.sleep(for: .milliseconds(150))
+                }
+                let entries = try await ReviewListPreparer.shared.prepare(
+                    dashboards: model.dashboards,
+                    selectedAppID: key.selectedAppID,
+                    filter: key.filter,
+                    unreadIDs: model.unreadReviewIDs
+                )
+                try Task.checkCancellation()
+                preparedEntries = entries
+                preparedKey = key
+                isPreparingReviews = false
+            } catch is CancellationError {
                 if reviewPreparationKey == key { isPreparingReviews = false }
-                return
+            } catch {
+                if reviewPreparationKey == key { isPreparingReviews = false }
+                model.presentedError = AppError.map(error)
             }
-            preparedEntries = entries
-            preparedKey = key
-            isPreparingReviews = false
         }
     }
 
@@ -238,7 +245,8 @@ private actor ReviewListPreparer {
         selectedAppID: String?,
         filter: ReviewFilter,
         unreadIDs: Set<String>
-    ) -> [ReviewListEntry] {
+    ) throws -> [ReviewListEntry] {
+        try Task.checkCancellation()
         let scoped = if let selectedAppID {
             dashboards.filter { $0.id == selectedAppID }
         } else {
@@ -247,13 +255,19 @@ private actor ReviewListPreparer {
 
         var entriesByID: [String: ReviewListEntry] = [:]
         for dashboard in scoped {
-            for review in dashboard.reviews {
+            try Task.checkCancellation()
+            for (index, review) in dashboard.reviews.enumerated() {
+                if index.isMultiple(of: 128) { try Task.checkCancellation() }
                 entriesByID[review.id] = ReviewListEntry(review: review, appName: dashboard.app.name)
             }
         }
 
-        return filter
-            .apply(to: entriesByID.values.map(\.review), unreadIDs: unreadIDs)
+        return try filter
+            .apply(
+                to: entriesByID.values.map(\.review),
+                unreadIDs: unreadIDs,
+                cancellationCheck: { try Task.checkCancellation() }
+            )
             .compactMap { entriesByID[$0.id] }
     }
 }
