@@ -58,7 +58,19 @@ struct AppOverviewView: View {
         }
         .navigationTitle("Overview")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { AppContextToolbar(dashboards: model.dashboards, selectedAppID: $selectedAppID) }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                if let dashboard {
+                    Button(
+                        model.preferences.isFavorite(appID: dashboard.id) ? "Remove from Favorites" : "Add to Favorites",
+                        systemImage: model.preferences.isFavorite(appID: dashboard.id) ? "star.fill" : "star"
+                    ) {
+                        model.preferences.toggleFavorite(appID: dashboard.id)
+                    }
+                }
+            }
+            AppContextToolbar(dashboards: model.dashboards, selectedAppID: $selectedAppID)
+        }
     }
 
     private func restorePlatform(for dashboard: AppDashboard) {
@@ -339,11 +351,5 @@ private struct SnapshotValueRow: View {
         case .notAvailable: "Not Available"
         case .insufficientData: "Insufficient"
         }
-    }
-}
-
-extension String {
-    var displayStatus: String {
-        split(separator: "_").map { $0.lowercased().capitalized }.joined(separator: " ")
     }
 }

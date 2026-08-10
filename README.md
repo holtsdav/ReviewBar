@@ -6,10 +6,10 @@ The project targets iOS 26, Swift 6 strict concurrency, SwiftUI, and version **0
 
 ## Product surface
 
-- **Apps:** every app visible to the key, without a global iOS filter. iOS/iPadOS, macOS, tvOS, and visionOS releases and builds are preserved. Multi-platform apps show each platform separately.
+- **Apps:** every app visible to the key, without a global iOS filter. iOS/iPadOS, macOS, tvOS, and visionOS releases and builds are preserved. Multi-platform apps show each platform separately. Favorites, persistent sorting, portfolio totals, and a needs-attention filter make larger catalogs easier to scan.
 - **App icons:** official `appStoreIcon` first, the newest suitable build’s `APP_STORE` icon second, and a deterministic local fallback otherwise. Downloaded icons use a bounded protected disk cache and remain available offline.
 - **Overview:** a compact operational dashboard for current release, latest build, newest review, and cached seven-day Analytics. Release History and Builds are destinations from Overview rather than permanent tabs.
-- **Reviews:** read-only customer-review reading, filters, sorting, response state, pagination, and device-local unread state.
+- **Reviews:** read-only customer-review reading, full-text search, rating/territory/version/unread/response filters, response coverage, sorting, sharing, pagination, and device-local unread state.
 - **Analytics:** official Analytics Reports discovery, initial ongoing-request creation, report/instance/segment pagination, gzip TSV import, schema validation, correction handling, aggregation, caching, data-through dates, and 7D/30D/90D/1Y ranges.
 - **Settings:** compact grouped account, data, optional notification, privacy, and about controls.
 - **Real-time updates:** optional per-app release, build-upload, and external-TestFlight alerts through official App Store Connect webhooks and the small Cloudflare relay in `NotificationRelay/`.
@@ -105,6 +105,8 @@ npm test
 - iPadOS uses Apple’s `IOS` platform value. Apple models watch apps inside a parent app/build relationship; there is no separate `WATCH_OS` Platform value to filter.
 
 See [`Documentation/AppStoreConnectAPI.md`](Documentation/AppStoreConnectAPI.md) for endpoint and schema notes.
+
+The latest product, UX, accessibility, security, concurrency, and test audit is recorded in [`Documentation/AppAudit-2026-08-10.md`](Documentation/AppAudit-2026-08-10.md).
 
 ## Security summary
 

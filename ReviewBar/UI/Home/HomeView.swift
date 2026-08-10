@@ -15,62 +15,62 @@ struct HomeView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            NavigationStack(path: $appsPath) {
-                AppsListView(
-                    model: model,
-                    selectedAppID: $selectedAppID,
-                    onOpenApp: { appID in
-                        selectedAppID = appID
-                        appsPath.append(AppsRoute.overview)
-                    }
-                )
-                .navigationDestination(for: AppsRoute.self) { route in
-                    switch route {
-                    case .overview:
-                        AppOverviewView(
-                            model: model,
-                            dashboard: selectedDashboard,
-                            selectedAppID: $selectedAppID,
-                            onOpenReviews: {
-                                reviewsPath = NavigationPath()
-                                selectedTab = .reviews
-                            },
-                            onOpenAnalytics: {
-                                analyticsPath = NavigationPath()
-                                selectedTab = .analytics
-                            }
-                        )
-                        .navigationDestination(for: OverviewRoute.self) { route in
-                            switch route {
-                            case .releaseHistory(let platform):
-                                ReleasesView(model: model, dashboard: selectedDashboard, initialPlatform: platform)
-                            case .builds(let platform):
-                                BuildsView(model: model, dashboard: selectedDashboard, initialPlatform: platform)
+            Tab("Apps", systemImage: "square.grid.2x2", value: .apps) {
+                NavigationStack(path: $appsPath) {
+                    AppsListView(
+                        model: model,
+                        selectedAppID: $selectedAppID,
+                        onOpenApp: { appID in
+                            selectedAppID = appID
+                            appsPath.append(AppsRoute.overview)
+                        }
+                    )
+                    .navigationDestination(for: AppsRoute.self) { route in
+                        switch route {
+                        case .overview:
+                            AppOverviewView(
+                                model: model,
+                                dashboard: selectedDashboard,
+                                selectedAppID: $selectedAppID,
+                                onOpenReviews: {
+                                    reviewsPath = NavigationPath()
+                                    selectedTab = .reviews
+                                },
+                                onOpenAnalytics: {
+                                    analyticsPath = NavigationPath()
+                                    selectedTab = .analytics
+                                }
+                            )
+                            .navigationDestination(for: OverviewRoute.self) { route in
+                                switch route {
+                                case .releaseHistory(let platform):
+                                    ReleasesView(model: model, dashboard: selectedDashboard, initialPlatform: platform)
+                                case .builds(let platform):
+                                    BuildsView(model: model, dashboard: selectedDashboard, initialPlatform: platform)
+                                }
                             }
                         }
                     }
                 }
             }
-            .tabItem { Label("Apps", systemImage: "square.grid.2x2") }
-            .tag(DashboardTab.apps)
 
-            NavigationStack(path: $reviewsPath) {
-                ReviewsView(model: model, isActive: selectedTab == .reviews)
+            Tab("Reviews", systemImage: "star.bubble", value: .reviews) {
+                NavigationStack(path: $reviewsPath) {
+                    ReviewsView(model: model, isActive: selectedTab == .reviews)
+                }
             }
-            .tabItem { Label("Reviews", systemImage: "star.bubble") }
             .badge(unreadCount)
-            .tag(DashboardTab.reviews)
 
-            NavigationStack(path: $analyticsPath) {
-                AnalyticsView(
-                    model: model,
-                    dashboard: selectedDashboard,
-                    selectedAppID: $selectedAppID,
-                    isActive: selectedTab == .analytics
-                )
+            Tab("Analytics", systemImage: "chart.xyaxis.line", value: .analytics) {
+                NavigationStack(path: $analyticsPath) {
+                    AnalyticsView(
+                        model: model,
+                        dashboard: selectedDashboard,
+                        selectedAppID: $selectedAppID,
+                        isActive: selectedTab == .analytics
+                    )
+                }
             }
-            .tabItem { Label("Analytics", systemImage: "chart.xyaxis.line") }
-            .tag(DashboardTab.analytics)
         }
         .onChange(of: selectedAppID) { _, newValue in
             UserDefaults.standard.set(newValue, forKey: "ReviewBar.selectedAppID")
@@ -93,10 +93,8 @@ struct HomeView: View {
     }
 }
 
-enum DashboardTab: Hashable {
-    case apps
-    case reviews
-    case analytics
+enum DashboardTab: String, Hashable {
+    case apps, reviews, analytics
 }
 
 private enum AppsRoute: Hashable {

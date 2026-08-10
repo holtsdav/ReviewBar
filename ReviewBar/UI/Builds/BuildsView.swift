@@ -6,6 +6,7 @@ struct BuildsView: View {
     @State private var selectedPlatform: AppRelease.Platform?
     @State private var filter: BuildFilter = .all
     @State private var sort: BuildSort = .newest
+    @State private var query = ""
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     init(model: AppModel, dashboard: AppDashboard?, initialPlatform: AppRelease.Platform?) {
@@ -37,10 +38,13 @@ struct BuildsView: View {
                         } description: {
                             Text(platformBuilds.isEmpty
                                  ? "Apple returned no builds for the selected platform."
-                                 : "Choose a different build filter.")
+                                 : "Clear the search or choose a different build filter.")
                         } actions: {
-                            if !platformBuilds.isEmpty, filter != .all {
-                                Button("Clear Filter") { filter = .all }
+                            if !platformBuilds.isEmpty, filter != .all || !query.isEmpty {
+                                Button("Clear Search and Filter") {
+                                    query = ""
+                                    filter = .all
+                                }
                             }
                         }
                     } else {
@@ -82,12 +86,16 @@ struct BuildsView: View {
         }
         .navigationTitle("Builds")
         .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $query, prompt: "Search build or version")
     }
 
     private var visibleBuilds: [BuildInfo] {
         guard let dashboard else { return [] }
         let filtered = dashboard.builds.filter { build in
             guard selectedPlatform == nil || build.platform == selectedPlatform else { return false }
+            guard query.isEmpty
+                    || build.buildNumber.localizedStandardContains(query)
+                    || (build.version?.localizedStandardContains(query) == true) else { return false }
             switch filter {
             case .all: return true
             case .processing: return !build.expired && build.processingState == .processing

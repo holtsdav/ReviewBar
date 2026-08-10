@@ -37,6 +37,10 @@ struct ReviewsView: View {
                     DataStatusBanner(lastUpdated: model.lastUpdated, issue: model.lastRefreshIssue)
                 }
 
+                if !reviews.isEmpty {
+                    ReviewSummaryView(reviews: reviews, unreadIDs: model.unreadReviewIDs)
+                }
+
                 ForEach(scopedDashboards.filter { $0.sectionIssues[.reviews] != nil }) { dashboard in
                     if let issue = dashboard.sectionIssues[.reviews] {
                         Section {
@@ -64,7 +68,7 @@ struct ReviewsView: View {
                              : "Try clearing or changing the active filters.")
                     } actions: {
                         if !reviews.isEmpty {
-                            Button("Clear Filters") { filter = ReviewFilter() }
+                            Button("Clear Search and Filters") { filter = ReviewFilter() }
                         }
                         if hasMoreReviews {
                             Button("Load More Reviews") { loadMoreReviews() }
@@ -120,6 +124,7 @@ struct ReviewsView: View {
                             Button("Filters", systemImage: filter == ReviewFilter() ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill") {
                                 showingFilters = true
                             }
+                            .accessibilityValue(filter.activeCriteriaCount == 0 ? "No active filters" : "\(filter.activeCriteriaCount) active")
                         }
                     }
                 }
@@ -130,6 +135,7 @@ struct ReviewsView: View {
         }
         .navigationTitle("Reviews")
         .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $filter.query, prompt: "Search reviews")
         .navigationDestination(for: CustomerReview.self) { review in
             ReviewDetailView(model: model, review: review)
         }
@@ -145,7 +151,8 @@ struct ReviewsView: View {
             let entries = await ReviewListPreparer.shared.prepare(
                 dashboards: model.dashboards,
                 selectedAppID: selectedReviewAppID,
-                filter: filter
+                filter: filter,
+                unreadIDs: model.unreadReviewIDs
             )
             guard !Task.isCancelled else {
                 if reviewPreparationKey == key { isPreparingReviews = false }
@@ -166,6 +173,7 @@ struct ReviewsView: View {
         ReviewPreparationKey(
             selectedAppID: selectedReviewAppID,
             filter: filter,
+            unreadIDs: filter.unreadOnly ? model.unreadReviewIDs.sorted() : [],
             dashboards: model.dashboards.map {
                 DashboardReviewVersion(
                     id: $0.id,
@@ -213,6 +221,7 @@ private struct DashboardReviewVersion: Equatable, Sendable {
 private struct ReviewPreparationKey: Equatable, Sendable {
     let selectedAppID: String?
     let filter: ReviewFilter
+    let unreadIDs: [String]
     let dashboards: [DashboardReviewVersion]
 }
 
@@ -227,7 +236,8 @@ private actor ReviewListPreparer {
     func prepare(
         dashboards: [AppDashboard],
         selectedAppID: String?,
-        filter: ReviewFilter
+        filter: ReviewFilter,
+        unreadIDs: Set<String>
     ) -> [ReviewListEntry] {
         let scoped = if let selectedAppID {
             dashboards.filter { $0.id == selectedAppID }
@@ -243,7 +253,7 @@ private actor ReviewListPreparer {
         }
 
         return filter
-            .apply(to: entriesByID.values.map(\.review))
+            .apply(to: entriesByID.values.map(\.review), unreadIDs: unreadIDs)
             .compactMap { entriesByID[$0.id] }
     }
 }
@@ -361,6 +371,11 @@ struct ReviewDetailView: View {
         .task(id: review.id) {
             await model.markRead(review)
         }
+        .toolbar {
+            ShareLink(item: shareText) {
+                Label("Share Review", systemImage: "square.and.arrow.up")
+            }
+        }
     }
 
     private var metadata: String {
@@ -368,6 +383,10 @@ struct ReviewDetailView: View {
         if let territory = DisplayFormatters.territory(review.territory) { parts.append(territory) }
         if let version = review.appVersion { parts.append("Version \(version)") }
         return parts.joined(separator: " · ")
+    }
+
+    private var shareText: String {
+        "\(review.rating) out of 5 stars — \(review.title)\n\n\(review.body)\n\n— \(review.reviewerNickname), \(metadata)"
     }
 }
 
@@ -389,6 +408,15 @@ private struct ReviewFilterView: View {
                             }
                         )) {
                             StarRatingView(rating: rating)
+                        }
+                    }
+                }
+
+                Section("Status") {
+                    Toggle("Unread Only", isOn: $filter.unreadOnly)
+                    Picker("Developer Response", selection: $filter.response) {
+                        ForEach(ReviewFilter.Response.allCases, id: \.self) { response in
+                            Text(response.title).tag(response)
                         }
                     }
                 }

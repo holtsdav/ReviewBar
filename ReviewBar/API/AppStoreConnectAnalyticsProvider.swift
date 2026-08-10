@@ -66,39 +66,21 @@ struct AppStoreConnectAnalyticsProvider: AnalyticsDataProviding, Sendable {
         // Import one report at a time. TSV rows are intentionally bounded but
         // still retained for report-specific aggregation, so parallel imports
         // would multiply peak memory without improving the quick-check UX.
-        for batchStart in stride(from: 0, to: reports.count, by: 1) {
+        for report in reports {
             try Task.checkCancellation()
-            let batch = Array(reports[batchStart..<min(batchStart + 1, reports.count)])
-            let results = await withTaskGroup(of: ReportImportResult.self) { group in
-                for report in batch {
-                    group.addTask {
-                        do {
-                            return .success(report.attributes.name, try await fetchReport(report))
-                        } catch is CancellationError {
-                            return .cancelled
-                        } catch {
-                            return .failure(report.attributes.name, AppError.map(error))
-                        }
-                    }
-                }
-                var values: [ReportImportResult] = []
-                for await value in group { values.append(value) }
-                return values
-            }
-            for result in results {
-                switch result {
-                case .success(_, let imported): merge(imported, into: &series)
-                case .failure(let name, let error):
-                    if error.kind == .malformedResponse {
-                        warnings.append("\(name): \(error.message)")
-                    } else {
-                        throw error
-                    }
-                case .cancelled: throw CancellationError()
+            do {
+                merge(try await fetchReport(report), into: &series)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                let mapped = AppError.map(error)
+                if mapped.kind == .malformedResponse {
+                    warnings.append("\(report.attributes.name): \(mapped.message)")
+                } else {
+                    throw mapped
                 }
             }
         }
-
         if series.isEmpty && warnings.isEmpty { return .generating }
         return .dataset(AnalyticsDataset(
             appID: appID,
@@ -277,10 +259,4 @@ struct AppStoreConnectAnalyticsProvider: AnalyticsDataProviding, Sendable {
             if newSeries.availability == .available { existing[index].availability = .available }
         }
     }
-}
-
-private enum ReportImportResult: Sendable {
-    case success(String, [AnalyticsMetricSeries])
-    case failure(String, AppError)
-    case cancelled
 }

@@ -275,7 +275,7 @@ struct AnalyticsTests {
         let cache = AnalyticsCache(directoryURL: directory)
 
         #expect(try await cache.load(appID: "app") == nil)
-        #expect(!FileManager.default.fileExists(atPath: file.path))
+        #expect(FileManager.default.fileExists(atPath: file.path) == false)
         let value = dataset(series: [])
         try await cache.save(value)
         #expect(try await cache.load(appID: "app") == value)
@@ -293,7 +293,7 @@ struct AnalyticsTests {
         let cache = AnalyticsInstanceCache(directoryURL: directory)
 
         #expect(try await cache.load(instanceID: instanceID, reportName: "App Sessions Standard", processingDay: processingDay) == nil)
-        #expect(!FileManager.default.fileExists(atPath: file.path))
+        #expect(FileManager.default.fileExists(atPath: file.path) == false)
         let archive = AnalyticsInstanceArchive(reportName: "App Sessions Standard", processingDay: processingDay, series: [])
         try await cache.save(archive, instanceID: instanceID)
         #expect(try await cache.load(instanceID: instanceID, reportName: archive.reportName, processingDay: processingDay) == [])

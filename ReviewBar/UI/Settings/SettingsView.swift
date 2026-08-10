@@ -8,6 +8,8 @@ struct SettingsView: View {
     @State private var showingSecurity = false
     @State private var showingLimitations = false
     @State private var cacheSize: Int64?
+    @State private var isClearingCache = false
+    @State private var cacheClearCount = 0
 
     var body: some View {
         NavigationStack {
@@ -27,25 +29,9 @@ struct SettingsView: View {
             }
             .task { await updateCacheSize() }
             .refreshable { await updateCacheSize() }
-            .confirmationDialog(disconnectTitle, isPresented: $confirmingDisconnect, titleVisibility: .visible) {
-                Button(disconnectActionTitle, role: .destructive) {
-                    Task { await disconnectConnection() }
-                }
-                Button("Cancel", role: .cancel) {}
-            }
-            .confirmationDialog("Clear ReviewBar's cached data?", isPresented: $confirmingClearCache) {
-                Button("Clear Cache", role: .destructive) {
-                    Task {
-                        await model.clearCachedData()
-                        await updateCacheSize()
-                    }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("App Store Connect credentials stay in the Keychain. Dashboard snapshots, Analytics reports, and downloaded app icons will be removed.")
-            }
             .sheet(isPresented: $showingSecurity) { securitySheet }
             .sheet(isPresented: $showingLimitations) { limitationsSheet }
+            .sensoryFeedback(.success, trigger: cacheClearCount)
         }
     }
 
@@ -58,6 +44,12 @@ struct SettingsView: View {
             )
             Button("Manage Connection", systemImage: "key") {
                 confirmingDisconnect = true
+            }
+            .confirmationDialog(disconnectTitle, isPresented: $confirmingDisconnect, titleVisibility: .visible) {
+                Button(disconnectActionTitle, role: .destructive) {
+                    Task { await disconnectConnection() }
+                }
+                Button("Cancel", role: .cancel) {}
             }
         }
     }
@@ -86,10 +78,32 @@ struct SettingsView: View {
                 }
             }
             .disabled(model.isRefreshing)
-            Button("Clear Cache", systemImage: "trash", role: .destructive) {
-                confirmingClearCache = true
+            if isClearingCache {
+                Label {
+                    Text("Clearing Cache…")
+                } icon: {
+                    ProgressView()
+                }
+            } else {
+                Button("Clear Cache", systemImage: "trash", role: .destructive) {
+                    confirmingClearCache = true
+                }
+                .disabled((cacheSize ?? 0) == 0)
+                .confirmationDialog("Clear ReviewBar's cached data?", isPresented: $confirmingClearCache) {
+                    Button("Clear Cache", role: .destructive) {
+                        Task {
+                            isClearingCache = true
+                            await model.clearCachedData()
+                            await updateCacheSize()
+                            isClearingCache = false
+                            if cacheSize == 0 { cacheClearCount += 1 }
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("App Store Connect credentials stay in the Keychain. Dashboard snapshots, Analytics reports, and downloaded app icons will be removed.")
+                }
             }
-            .disabled((cacheSize ?? 0) == 0)
         }
     }
 

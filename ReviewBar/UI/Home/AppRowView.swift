@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AppRowView: View {
     let dashboard: AppDashboard
+    let isFavorite: Bool
     let unreadCount: Int
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -28,10 +29,17 @@ struct AppRowView: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 7) {
-                Text(dashboard.app.name)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(dashboard.app.name)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                    if isFavorite {
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(.yellow)
+                            .accessibilityLabel("Favorite")
+                    }
+                }
 
                 if !dashboard.availablePlatforms.isEmpty {
                     ForEach(dashboard.availablePlatforms, id: \.self) { platform in
@@ -71,7 +79,12 @@ struct AppRowView: View {
                     }
                     if unreadCount > 0 {
                         Label("\(unreadCount) new \(unreadCount == 1 ? "review" : "reviews")", systemImage: "circle.fill")
-                            .fontWeight(.semibold).foregroundStyle(.tint)
+                            .bold().foregroundStyle(.tint)
+                    }
+                    if dashboard.requiresAttention {
+                        Label("Needs attention", systemImage: "exclamationmark.triangle.fill")
+                            .bold()
+                            .foregroundStyle(.orange)
                     }
     }
 }

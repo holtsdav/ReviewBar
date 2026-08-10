@@ -23,6 +23,11 @@ struct AppDashboard: Identifiable, Codable, Hashable, Sendable {
     var distributionReadyRelease: AppRelease? { distributionReadyRelease(in: nil) }
     var latestBuild: BuildInfo? { latestBuild(in: nil) }
     var newestReview: CustomerReview? { reviews.first }
+    var requiresAttention: Bool {
+        !sectionIssues.isEmpty
+            || releases.contains { $0.state.requiresAttention }
+            || builds.contains { $0.processingState == .failed || $0.processingState == .invalid }
+    }
 
     func currentRelease(in platform: AppRelease.Platform?) -> AppRelease? {
         let candidates = platform.map { selected in releases.filter { $0.platform == selected } } ?? releases

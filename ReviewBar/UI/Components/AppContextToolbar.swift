@@ -19,8 +19,9 @@ struct AppContextToolbar: ToolbarContent {
                     }
                 }
             } label: {
-                Image(systemName: "square.grid.2x2")
+                Label("Switch App", systemImage: "square.grid.2x2")
             }
+            .labelStyle(.iconOnly)
             .accessibilityLabel("Selected app")
             .accessibilityValue(selectedAppName)
         }

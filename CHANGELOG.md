@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Added locally persisted favorite apps, favorite-first sorting, portfolio totals, and a needs-attention workflow for failed releases/builds and section issues.
+- Added full-text review search, unread and developer-response filters, rating/response coverage, and native review sharing.
+- Added build-number/version search, an explicit app-list refresh action, refresh recency, and clearer empty-state recovery.
+- Updated the tab bar to the modern typed API and improved app-switcher, destructive-action, cache-progress, and lifecycle-refresh accessibility/behavior.
+- Simplified Analytics report importing so its documented sequential memory behavior no longer creates redundant one-child task groups.
+- Added preference, attention, and review-workflow regression coverage plus a complete app/relay audit record.
+
 ## 0.1.1 — 2026-08-01
 
 - Removed global iOS-only assumptions; added explicit iOS/iPadOS, macOS, tvOS, and visionOS presentation plus complete build pagination.

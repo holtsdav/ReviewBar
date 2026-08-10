@@ -5,6 +5,23 @@ import Testing
 
 @MainActor
 struct AppModelTests {
+    @Test("Favorite apps and app-list choices persist locally")
+    func appPreferencesPersistence() {
+        let suiteName = "ReviewBarTests.preferences.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)
+        defer { defaults?.removePersistentDomain(forName: suiteName) }
+        let preferences = AppPreferences(defaults: defaults)
+
+        preferences.toggleFavorite(appID: "app-1")
+        preferences.appListSort = .favoritesFirst
+        preferences.appActivityFilter = .needsAttention
+
+        let restored = AppPreferences(defaults: defaults)
+        #expect(restored.favoriteAppIDs == ["app-1"])
+        #expect(restored.appListSort == .favoritesFirst)
+        #expect(restored.appActivityFilter == .needsAttention)
+    }
+
     @Test("Preview fixture data is isolated from live stores")
     func previewDataIsolation() async throws {
         let liveReads = ReviewReadStore()

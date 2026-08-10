@@ -22,6 +22,7 @@ final class AppModel {
     private(set) var realtimeInstallation: RealtimeInstallation?
     private(set) var realtimeSetupState: RealtimeSetupState = .loading
     var presentedError: AppError?
+    let preferences: AppPreferences
 
     private let credentialStore: any CredentialStoring
     private let cache: any SnapshotCaching
@@ -52,7 +53,8 @@ final class AppModel {
         readStore: ReviewReadStore,
         analyticsCache: any AnalyticsCaching = MemoryAnalyticsCache(),
         realtimeStateStore: any RealtimeStateStoring = MemoryRealtimeStateStore(),
-        relayConfiguration: NotificationRelayConfiguration = NotificationRelayConfiguration(baseURL: nil)
+        relayConfiguration: NotificationRelayConfiguration = NotificationRelayConfiguration(baseURL: nil),
+        preferences: AppPreferences = AppPreferences()
     ) {
         self.session = session
         self.credentialStore = credentialStore
@@ -65,6 +67,7 @@ final class AppModel {
         self.analyticsCache = analyticsCache
         self.realtimeStateStore = realtimeStateStore
         self.relayConfiguration = relayConfiguration
+        self.preferences = preferences
     }
 
     static func live() -> AppModel {
@@ -89,7 +92,8 @@ final class AppModel {
             credentialStore: MemoryCredentialStore(),
             cache: cache,
             historyStore: ReleaseHistoryStore(),
-            readStore: ReviewReadStore(initiallyReadIDs: ["review-g-2", "review-g-3", "review-t-1"])
+            readStore: ReviewReadStore(initiallyReadIDs: ["review-g-2", "review-g-3", "review-t-1"]),
+            preferences: AppPreferences(defaults: nil, favoriteAppIDs: ["app-glassdays"])
         )
         model.dashboards = DemoFixtures.dashboards
         model.lastUpdated = DemoFixtures.referenceDate
@@ -137,6 +141,7 @@ final class AppModel {
 
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-ui-testing-reset") {
+            preferences.resetUITestState()
             for key in UserDefaults.standard.dictionaryRepresentation().keys where key.hasPrefix("ReviewBar.platform.") {
                 UserDefaults.standard.removeObject(forKey: key)
             }
@@ -1170,6 +1175,7 @@ final class AppModel {
         UserDefaults.standard.set(!cleanupSucceeded, forKey: "ReviewBar.pendingLocalCleanup")
 
         dashboards = []
+        preferences.clearAccountScopedData()
         analyticsStates = [:]
         unreadReviewIDs = []
         lastUpdated = nil

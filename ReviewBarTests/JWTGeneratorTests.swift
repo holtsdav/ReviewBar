@@ -28,7 +28,7 @@ struct JWTGeneratorTests {
         let signature = try P256.Signing.ECDSASignature(rawRepresentation: signatureData)
         let signedData = try #require("\(parts[0]).\(parts[1])".data(using: .utf8))
         #expect(privateKey.publicKey.isValidSignature(signature, for: signedData))
-        #expect(!token.value.contains("="))
+        #expect(token.value.contains("=") == false)
     }
 
     @Test("Individual token uses sub user and omits issuer")

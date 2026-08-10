@@ -43,6 +43,33 @@ struct DomainTests {
         #expect(results.map(\.id) == ["review-g-1"])
     }
 
+    @Test("Review search, unread, and response filters compose")
+    func reviewWorkflowFiltering() {
+        let filter = ReviewFilter(
+            query: "exactly",
+            unreadOnly: true,
+            response: .withoutResponse
+        )
+        let results = filter.apply(
+            to: DemoFixtures.dashboards[0].reviews,
+            unreadIDs: ["review-g-1", "review-g-2"]
+        )
+
+        #expect(results.map(\.id) == ["review-g-1"])
+        #expect(filter.activeCriteriaCount == 3)
+    }
+
+    @Test("Dashboard attention includes failed builds and release failures")
+    func dashboardAttention() throws {
+        let failedBuildDashboard = try #require(
+            DemoFixtures.dashboards.first { dashboard in
+                dashboard.builds.contains { $0.processingState == .failed }
+            }
+        )
+        #expect(failedBuildDashboard.requiresAttention)
+        #expect(DemoFixtures.dashboards[0].requiresAttention == false)
+    }
+
     @Test("Expired builds stay distinct from successful processing")
     func expiredBuildPrecedence() {
         let build = DemoFixtures.dashboards[1].builds.first { $0.expired }

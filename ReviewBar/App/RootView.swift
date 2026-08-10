@@ -37,9 +37,9 @@ struct RootView: View {
             await Task.yield()
             await model.prepareRealtimeState()
         }
-        .onChange(of: scenePhase) { _, newPhase in
-            guard newPhase == .active else { return }
-            Task { await model.refreshIfStale() }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            await model.refreshIfStale()
         }
         .alert(model.presentedError?.title ?? "Connection Issue", isPresented: Binding(
             get: { model.presentedError != nil },

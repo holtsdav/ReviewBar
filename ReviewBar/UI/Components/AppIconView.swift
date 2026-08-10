@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 struct AppIconView: View {
     let asset: AppIconAsset?
