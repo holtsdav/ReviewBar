@@ -2,6 +2,17 @@ import XCTest
 
 final class ReviewBarUITests: XCTestCase {
     @MainActor
+    func testServiceFreeHost() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-reviewbar-service-free-tests"]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.staticTexts["service-free-test-host"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Connect to App Store Connect"].exists)
+        XCTAssertFalse(app.navigationBars["Apps"].exists)
+    }
+
+    @MainActor
     func testFixtureDashboardNavigation() throws {
         let app = launch(["-ui-testing-fixture"])
         defer {

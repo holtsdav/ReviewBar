@@ -72,15 +72,19 @@ final class ReviewBarAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        UNUserNotificationCenter.current().delegate = self
+        ReviewBarStartup.current.configureNotifications {
+            UNUserNotificationCenter.current().delegate = self
+        }
         return true
     }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        guard !ReviewBarStartup.current.isServiceFreeTestHost else { return }
         Task { @MainActor in PushRegistrationCenter.shared.didRegister(deviceToken: deviceToken) }
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        guard !ReviewBarStartup.current.isServiceFreeTestHost else { return }
         Task { @MainActor in PushRegistrationCenter.shared.didFail(error: error) }
     }
 

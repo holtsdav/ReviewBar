@@ -95,3 +95,23 @@ schemes:
         - name: ReviewBarUITests
     run:
       config: Debug
+  ReviewBar Service-Free Tests:
+    build:
+      targets:
+        ReviewBar: all
+        ReviewBarTests: [test]
+        ReviewBarUITests: [test]
+    test:
+      config: Debug
+      commandLineArguments:
+        "-reviewbar-service-free-tests": true
+      gatherCoverageData: true
+      targets:
+        - name: ReviewBarTests
+          selectedTests: [StartupTests]
+        - name: ReviewBarUITests
+          selectedTests: [ReviewBarUITests/testServiceFreeHost()]
+    run:
+      config: Debug
+      commandLineArguments:
+        "-reviewbar-service-free-tests": true

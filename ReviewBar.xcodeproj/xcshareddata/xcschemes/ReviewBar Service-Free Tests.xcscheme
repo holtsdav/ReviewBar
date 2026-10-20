@@ -1,0 +1,65 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<Scheme LastUpgradeVersion="2600" version="1.7">
+   <BuildAction parallelizeBuildables="YES" buildImplicitDependencies="YES" runPostActionsOnFailure="NO">
+      <BuildActionEntries>
+         <BuildActionEntry buildForTesting="YES" buildForRunning="YES" buildForProfiling="YES" buildForArchiving="YES" buildForAnalyzing="YES">
+            <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="817FEA50266ED908BEF84E70" BuildableName="ReviewBar.app" BlueprintName="ReviewBar" ReferencedContainer="container:ReviewBar.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry buildForTesting="YES" buildForRunning="NO" buildForProfiling="NO" buildForArchiving="NO" buildForAnalyzing="NO">
+            <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="5104AA425C55072F2299E6F4" BuildableName="ReviewBarTests.xctest" BlueprintName="ReviewBarTests" ReferencedContainer="container:ReviewBar.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry buildForTesting="YES" buildForRunning="NO" buildForProfiling="NO" buildForArchiving="NO" buildForAnalyzing="NO">
+            <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="7A99BFBED6D3BA888F39737A" BuildableName="ReviewBarUITests.xctest" BlueprintName="ReviewBarUITests" ReferencedContainer="container:ReviewBar.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+      </BuildActionEntries>
+   </BuildAction>
+   <TestAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.DebuggerFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv="NO" codeCoverageEnabled="YES" onlyGenerateCoverageForSpecifiedTargets="NO">
+      <MacroExpansion>
+         <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="817FEA50266ED908BEF84E70" BuildableName="ReviewBar.app" BlueprintName="ReviewBar" ReferencedContainer="container:ReviewBar.xcodeproj">
+         </BuildableReference>
+      </MacroExpansion>
+      <Testables>
+         <TestableReference skipped="NO" parallelizable="NO">
+            <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="5104AA425C55072F2299E6F4" BuildableName="ReviewBarTests.xctest" BlueprintName="ReviewBarTests" ReferencedContainer="container:ReviewBar.xcodeproj">
+            </BuildableReference>
+            <SelectedTests>
+               <Test Identifier="StartupTests" />
+            </SelectedTests>
+         </TestableReference>
+         <TestableReference skipped="NO" parallelizable="NO">
+            <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="7A99BFBED6D3BA888F39737A" BuildableName="ReviewBarUITests.xctest" BlueprintName="ReviewBarUITests" ReferencedContainer="container:ReviewBar.xcodeproj">
+            </BuildableReference>
+            <SelectedTests>
+               <Test Identifier="ReviewBarUITests/testServiceFreeHost()" />
+            </SelectedTests>
+         </TestableReference>
+      </Testables>
+      <CommandLineArguments>
+         <CommandLineArgument argument="-reviewbar-service-free-tests" isEnabled="YES" />
+      </CommandLineArguments>
+   </TestAction>
+   <LaunchAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.DebuggerFoundation.Launcher.LLDB" launchStyle="0" useCustomWorkingDirectory="NO" ignoresPersistentStateOnLaunch="NO" debugDocumentVersioning="YES" debugServiceExtension="internal" allowLocationSimulation="YES">
+      <BuildableProductRunnable runnableDebuggingMode="0">
+         <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="817FEA50266ED908BEF84E70" BuildableName="ReviewBar.app" BlueprintName="ReviewBar" ReferencedContainer="container:ReviewBar.xcodeproj">
+         </BuildableReference>
+      </BuildableProductRunnable>
+      <CommandLineArguments>
+      </CommandLineArguments>
+      <CommandLineArguments>
+         <CommandLineArgument argument="-reviewbar-service-free-tests" isEnabled="YES" />
+      </CommandLineArguments>
+   </LaunchAction>
+   <ProfileAction buildConfiguration="Release" shouldUseLaunchSchemeArgsEnv="YES" savedToolIdentifier="" useCustomWorkingDirectory="NO" debugDocumentVersioning="YES">
+      <BuildableProductRunnable runnableDebuggingMode="0">
+         <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="817FEA50266ED908BEF84E70" BuildableName="ReviewBar.app" BlueprintName="ReviewBar" ReferencedContainer="container:ReviewBar.xcodeproj">
+         </BuildableReference>
+      </BuildableProductRunnable>
+   </ProfileAction>
+   <AnalyzeAction buildConfiguration="Debug">
+   </AnalyzeAction>
+   <ArchiveAction buildConfiguration="Release" revealArchiveInOrganizer="YES">
+   </ArchiveAction>
+</Scheme>

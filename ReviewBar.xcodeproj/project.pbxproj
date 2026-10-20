@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A10C0DE00000000000000001 /* StartupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10C0DE00000000000000002 /* StartupTests.swift */; };
 		02B2B08DC22F518EB671A977 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B9761068CA8B65FCD8B966E /* AppError.swift */; };
 		0D1F4D8D80ADE91DA9633267 /* ReviewSummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E60E4FF23A587D807703D4C8 /* ReviewSummaryView.swift */; };
 		0DA1C63359EBFC53A8FB8697 /* DisplayFormatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5601C4F3C3D887CD3A7BD0C /* DisplayFormatters.swift */; };
@@ -110,6 +111,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A10C0DE00000000000000002 /* StartupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupTests.swift; sourceTree = "<group>"; };
 		005EAC3BDACBDAB153BC9CF8 /* AppStoreConnectCredential.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreConnectCredential.swift; sourceTree = "<group>"; };
 		06EA3D4DE36AB2A6D3D24CE6 /* DemoAnalyticsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAnalyticsProvider.swift; sourceTree = "<group>"; };
 		0A5F1DEED748A5ADACDD6133 /* AnalyticsInstanceCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsInstanceCache.swift; sourceTree = "<group>"; };
@@ -248,6 +250,7 @@
 				BF7EEA7A5B9EE6F0EDFDF98B /* AnalyticsProviderTests.swift */,
 				5BB23DE2A88AC14AA8849C06 /* AnalyticsTests.swift */,
 				E1F15814CBF3055E1FF22E60 /* AppModelTests.swift */,
+				A10C0DE00000000000000002 /* StartupTests.swift */,
 				3D0A3896602BAD9C85ADD43F /* DecodingTests.swift */,
 				92C8990F48A335A4AD833CDE /* DomainTests.swift */,
 				D511C700DC2D930E1C7FA553 /* IconTests.swift */,
@@ -656,6 +659,7 @@
 				6F36D7797D2CF9172E5CD52A /* AnalyticsProviderTests.swift in Sources */,
 				BF22ED50D37938758FF7BBFB /* AnalyticsTests.swift in Sources */,
 				DA22BE9192B70B666AF8F9B6 /* AppModelTests.swift in Sources */,
+				A10C0DE00000000000000001 /* StartupTests.swift in Sources */,
 				58A04433B786D99CE3325DC7 /* DecodingTests.swift in Sources */,
 				1C845FCD5EA53E83C99849C0 /* DomainTests.swift in Sources */,
 				757C2786F9F98C81F3DE1422 /* IconTests.swift in Sources */,

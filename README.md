@@ -83,6 +83,15 @@ xcodebuild -project ReviewBar.xcodeproj -scheme ReviewBar \
 
 Run the simulator tests to exercise the signed-out, empty-account, unavailable-service, and multi-platform fixture scenarios. Fixtures are injected only by `#if DEBUG` UI-test launch arguments; production builds never activate them implicitly.
 
+For a service-free startup check, use the **ReviewBar Service-Free Tests** scheme on a fresh simulator:
+
+```sh
+xcodebuild -project ReviewBar.xcodeproj -scheme 'ReviewBar Service-Free Tests' \
+  -destination 'platform=iOS Simulator,name=iPhone 17' test
+```
+
+This Debug-only entry uses the exact `-reviewbar-service-free-tests` launch argument. It constructs no live app model or credential/cache stores, skips notification delegate setup, and displays an inert host instead of product views. The scheme selects only startup factory tests, a memory-only dashboard refresh and an inert-host UI smoke test. It does not validate the full app UI, App Store Connect, APNs or a relay. The ordinary `ReviewBar` scheme and its older UI fixture arguments are separate; those fixtures initialize live stores before selecting their data and do not provide this startup isolation. Release builds ignore the service-free argument.
+
 Relay validation is independent:
 
 ```sh
