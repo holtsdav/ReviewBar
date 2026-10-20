@@ -47,8 +47,6 @@
          </BuildableReference>
       </BuildableProductRunnable>
       <CommandLineArguments>
-      </CommandLineArguments>
-      <CommandLineArguments>
          <CommandLineArgument argument="-reviewbar-service-free-tests" isEnabled="YES" />
       </CommandLineArguments>
    </LaunchAction>
